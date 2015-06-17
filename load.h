@@ -33,7 +33,7 @@ struct {
     // Statistics
     char startTime[20];
     char endTime[20];
-    int durationTime;
+    int stopTime;
 
     int cycleCount;	
 }testDataList;

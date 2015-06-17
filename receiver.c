@@ -53,6 +53,7 @@ struct masterStatus_t{
     int m_clientfd;
     char recvBuff[1024];
     char sendBuff[1024];
+    int sendLen;
     int retryMasteridx;
     int retryTimes;             // retry times
     m_status status;
@@ -77,6 +78,7 @@ static fd_set readSet;
 static fd_set writeSet;
 struct timeval select_tm ;
 
+static long t_i = 0;
 //**********************************************************
 //      Persional Function Statement
 //**********************************************************
@@ -191,6 +193,7 @@ struct buffer_s* fillNetflowData_test(testData* eth_hdr) {
     // totalLen(1int) + ipflage(1byte) + ipAddress(4|16Byte) + netflowData(nByte)
     ushort payload_len = (ushort)eth_hdr->length;
     ushort ipLen = 4;
+    // totalLen + char + ipLen + payLoad
     ushort totalLen = sizeof(ushort) + sizeof(char) + ipLen + payload_len;
    
     if(sendbuffer.buffMaxLen <  totalLen){
@@ -415,7 +418,7 @@ static int setTcpKeepAlive(int fd, int start, int interval, int count){
 /* 
  * @Function:
  *      the function for request the worker list. command may be like as follow  :
- *              1) $req$                         --> request the worker list
+ *              1) $req$                                        --> request the worker list
  *              2) $req$-192.168.80.1:100020     -->request the worker list except 192.168.80.1:100020
  *
  * @Param:
@@ -443,6 +446,7 @@ static void requestMaster(char* removeIP_port){
     
     // copy the length
     memcpy(masterStatus.sendBuff, &offset, sizeof(unsigned short));
+    masterStatus.sendLen = offset;
     masterStatus.report = on;
     LogWrite(DEBUG, "Request worker list from master, request command %s", masterStatus.sendBuff);
 }
@@ -548,18 +552,19 @@ static void dealWithMasterSet(){
                 break;
             case connected:{
                 int countNum =  
-                    send(masterStatus.m_clientfd, masterStatus.sendBuff, strlen(masterStatus.sendBuff), 0);
+                    send(masterStatus.m_clientfd, masterStatus.sendBuff, masterStatus.sendLen, 0);
                 char* bp = masterStatus.sendBuff;
-                while(countNum != strlen(bp) ){
+                while(countNum != masterStatus.sendLen ){
                     if( countNum == -1){        
                         LogWrite(ERROR,"Connect master error. %s",strerror(errno));
                         close(masterStatus.m_clientfd);
                         masterStatus.status = retry;
                         retryConnectMaster();                
                     }else{
-                        LogWrite(WARN,"Send to master total data %d, actual data %d.", strlen(bp), countNum);
+                        LogWrite(WARN,"Send to master total data %d, actual data %d.", 
+                                masterStatus.sendLen, countNum);
                         bp = bp + countNum;
-                        countNum = send(masterStatus.m_clientfd, bp, strlen(bp), 0);
+                        countNum = send(masterStatus.m_clientfd, bp, masterStatus.sendLen - countNum, 0);
                     }
                 }
                 masterStatus.report = off;          
@@ -588,11 +593,12 @@ static void dealWithWorkerSet(struct buffer_s* data){
                 errno, strerror(errno), readCount);
 
             if( readCount == -1 || readCount == 0 ){
-                if(errno == ECONNRESET ){                
+    //            if(errno == ECONNRESET ){                
                     LogWrite(WARN,"Disconnect with worker %s",worker_list.workerList[idx]); 
                     FD_CLR(fd,&writeSet);
                     shutdown(fd,SHUT_WR);
                     close(fd);
+                    printCountLog();
 
                 // If there is only one worker connected with this receiver, we must request a new worker.
                 // If there is more than one workers, ignore the request.
@@ -609,7 +615,7 @@ static void dealWithWorkerSet(struct buffer_s* data){
                 // but now worker_idx will be set 4 after the "while" circulation,
                 // that means we will skip a active worker.
                 removeWorker(worker_idx);   
-                }
+        //        }
             }
         }
 
@@ -633,7 +639,9 @@ static void dealWithWorkerSet(struct buffer_s* data){
                             inet_ntoa(worker_list.workerIP[idx].sin_addr), data->bufflen, no);
                     no = send(fd, data->buff + no, (size_t)(data->bufflen - no), 0);
                 }
-            }           
+            }
+            
+            printf("%ld worker write! send data count =%d, errno=%s\n",++t_i, no, strerror(errno));
         }
         worker_idx ++;
     }
@@ -707,8 +715,7 @@ static void updateWorkerList(char* workerList, int len){
                             break;      // exist in current worker_list
                         }
                     }
-                    
-                    
+                                  
                     // add new ip into worker_list
                     for(i=0; i <  worker_list.maxNum; i++){
                          if(worker_list.workerList[i] == NULL){          // find place to insert into

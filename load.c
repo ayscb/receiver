@@ -51,13 +51,9 @@ void test_loadData(){
             // read the data
             checkSpace();
 
-            long pos = ftell(fp);
-            fread(&length, sizeof(short), 1, fp);
-            length = ntohs(length) + 2;			// length(2B)+ length
-            if(fseek(fp, pos, SEEK_SET)!=0){
-                    LogWrite(WARN,"Read %s file, seek_set error.",files[i]);
-            }
-            if( length > 1500 || length <= 0){
+            fread(&length, sizeof(short), 1, fp);       // length dees not include itself
+            length = ntohs(length);			//  length
+            if( length > 1480 || length <= 0){
                 // skip the data
                 continue;
             } 
@@ -82,16 +78,23 @@ void* test_sendData(void* arg){
     printf("start thread!");
     test_start();
     int curT = time((time_t*)NULL);
-    while(time((time_t*)NULL) < testDataList.durationTime){
+    while(time((time_t*)NULL) < testDataList.stopTime){
         usleep(testDataList.usleep);
         testData* data = testDataList.datalist + testDataList.currId;
 		
      //   writeData(data->data);
+        unsigned int time = *((unsigned int*)(data->data + 8));
+        unsigned int h_time = ntohl(time);
+        h_time + testDataList.cycleCount * 10 * 60 * 1000;
+        time = htonl(h_time);
+        memcpy(data->data+8, &time, sizeof(unsigned int));
+        
         writeData(data);
         testDataList.currId++;
         if(testDataList.currId == testDataList.totalNum){
             testDataList.cycleCount ++;
             testDataList.currId = 0;
+            prinfBufferInfo();
         }
     }
     while(!isEmpty()){};    // wait until read over
@@ -101,16 +104,16 @@ void* test_sendData(void* arg){
 //      personal function
 //***************************************************
 static void test_start(){
-    memset(testDataList.startTime,sizeof(testDataList.startTime),1);
-    memset(testDataList.endTime,sizeof(testDataList.endTime),1);
+    memset(testDataList.startTime,sizeof(testDataList.startTime),0);
+    memset(testDataList.endTime,sizeof(testDataList.endTime),0);
     testDataList.cycleCount = 0;
     settime(testDataList.startTime, sizeof(testDataList.startTime));
 
     if(netflowtest.durationTime == 0){
         LogWrite(WARN,"durationTime will set 60s.");
-        testDataList.durationTime = time((time_t*)NULL) + 60;
+        testDataList.stopTime = time((time_t*)NULL) + 60000;
     }else{
-        testDataList.durationTime = time((time_t*)NULL) + netflowtest.durationTime;
+        testDataList.stopTime = time((time_t*)NULL) + netflowtest.durationTime * 1000;
     }
 }
 
@@ -120,11 +123,12 @@ static void test_end(){
     LogWrite(INFO,"start time %s, end time %s, total time(s) %d",
         testDataList.startTime, 
         testDataList.endTime,
-        testDataList.durationTime);
+        testDataList.stopTime/1000);
     LogWrite(INFO,"total send data num is %d",
         testDataList.cycleCount * testDataList.totalNum + testDataList.currId);
     prinfBufferInfo();
     LogWrite(INFO,"---------- Test result ---------------");
+    printf("test Over!!!!");
 }
 
 static void checkSpace(){

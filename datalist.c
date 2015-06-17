@@ -6,8 +6,11 @@
  ************************************************************************/
 #include "datalist.h"
 #include "log.h"
+static int incrNum = 10000;
 
 void writeData(testData* data){
+
+    incrNum -- ;
     if( isFull()) return; 
     if(data == NULL) return; 
     dataBuff.datalist[dataBuff.cur_write_idx] = data;

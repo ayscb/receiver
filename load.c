@@ -79,22 +79,24 @@ void* test_sendData(void* arg){
     test_start();
     int curT = time((time_t*)NULL);
     while(time((time_t*)NULL) < testDataList.stopTime){
-        usleep(testDataList.usleep);
+      //  usleep(testDataList.usleep);
         testData* data = testDataList.datalist + testDataList.currId;
 		
-     //   writeData(data->data);
-        unsigned int time = *((unsigned int*)(data->data + 8));
-        unsigned int h_time = ntohl(time);
-        h_time + testDataList.cycleCount * 10 * 60 * 1000;
-        time = htonl(h_time);
-        memcpy(data->data+8, &time, sizeof(unsigned int));
+      //  unsigned int time = *((unsigned int*)(data->data + 8));
+    //    unsigned int h_time = ntohl(time);
+    //    h_time + testDataList.cycleCount * 10 * 60 * 1000;
+    //    time = htonl(h_time);
+     //   memcpy(data->data+8, &time, sizeof(unsigned int));
         
         writeData(data);
         testDataList.currId++;
         if(testDataList.currId == testDataList.totalNum){
+            if(testDataList.cycleCount % 1000 == 0){
+                LogWrite(INFO,"test total num is %ld, times is %ld",testDataList.totalNum, testDataList.cycleCount);
+                prinfBufferInfo();
+            }
             testDataList.cycleCount ++;
-            testDataList.currId = 0;
-            prinfBufferInfo();
+            testDataList.currId = 0;          
         }
     }
     while(!isEmpty()){};    // wait until read over

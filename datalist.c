@@ -18,7 +18,7 @@ void writeData(testData* data){
 }
 
 testData* readData(){
-    if( isEmpty())  return NULL;
+    if(isEmpty())  return NULL;
     int idx = dataBuff.cur_read_idx;
     dataBuff.cur_read_idx = (dataBuff.cur_read_idx+1)%MAXLENGTH;
     return (testData* )(dataBuff.datalist[idx] );
@@ -31,6 +31,8 @@ void prinfBufferInfo(){
     LogWrite(INFO,"write data miss number %d, read data miss number %d",
         dataBuff.miss_w_count,dataBuff.miss_r_count);
     LogWrite(INFO,"---------- buffer Info ---------------");
+    LogWrite(INFO,"");
+    LogWrite(INFO,"");
 }
 
 int isEmpty(){

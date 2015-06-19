@@ -448,7 +448,8 @@ static void requestMaster(char* removeIP_port){
     memcpy(masterStatus.sendBuff, &offset, sizeof(unsigned short));
     masterStatus.sendLen = offset;
     masterStatus.report = on;
-    LogWrite(DEBUG, "Request worker list from master, request command %s", masterStatus.sendBuff);
+    LogWrite(DEBUG, "Request worker list from master, request command length %d, content is %s", 
+    *(unsigned short*)masterStatus.sendBuff, masterStatus.sendBuff + sizeof(unsigned short));
 }
 
 static int resetFdset(struct buffer_s* data){
@@ -470,7 +471,7 @@ static int resetMasterFdSet(int curfd){
     if(masterStatus.status == connected 
             || masterStatus.status == retry 
             || masterStatus.status == connecting){
-        LogWrite(DEBUG,"FD_SET-master_fd(%d)-readSet",masterStatus.m_clientfd);
+        LogWrite(DEBUG,"FD_SET-master_fd(%ld)-readSet",masterStatus.m_clientfd);
         FD_SET(masterStatus.m_clientfd, &readSet);
         
         if(masterStatus.report == on 
@@ -618,6 +619,12 @@ static void dealWithWorkerSet(struct buffer_s* data){
         //        }
             }
         }
+        
+      //  if(data == NULL){
+     //       LogWrite(INFO,"data is null");
+     //       printf("data is null \n");
+      //      return;
+     //   }
 
         /* write the netflow package to worker*/
         if( FD_ISSET(fd, &writeSet)){
@@ -641,7 +648,7 @@ static void dealWithWorkerSet(struct buffer_s* data){
                 }
             }
             
-            printf("%ld worker write! send data count =%d, errno=%s\n",++t_i, no, strerror(errno));
+       //     printf("%ld worker write! send data count =%d, errno=%s\n",++t_i, no, strerror(errno));
         }
         worker_idx ++;
     }

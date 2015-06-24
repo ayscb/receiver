@@ -43,7 +43,7 @@ void test_loadData(){
         }
         FILE* fp = fopen(files[i],"rb");
         if(fp == NULL){
-            LogWrite(WARN,"Can not open file %s, %s",files[i],strerror(errno));
+            //LogWrite(WARN,"Can not open file %s, %s",files[i],strerror(errno));
             continue;
         }
 		
@@ -68,13 +68,13 @@ void test_loadData(){
 
     // vertify
     if(testDataList.totalNum == 0){
-        LogWrite(ERROR,"Can not find test data file, please check again!");
+        //LogWrite(ERROR,"Can not find test data file, please check again!");
         exit(-1);
     }
 }
 
 void* test_sendData(void* arg){
-    LogWrite(INFO,"Start thread!");
+    //LogWrite(INFO,"Start thread!");
     printf("start thread!");
     test_start();
     int curT = time((time_t*)NULL);
@@ -92,7 +92,7 @@ void* test_sendData(void* arg){
         testDataList.currId++;
         if(testDataList.currId == testDataList.totalNum){
             if(testDataList.cycleCount % 1000 == 0){
-                LogWrite(INFO,"test total num is %ld, times is %ld",testDataList.totalNum, testDataList.cycleCount);
+                //LogWrite(INFO,"test total num is %d, times is %d",testDataList.totalNum, testDataList.cycleCount);
                 prinfBufferInfo();
             }
             testDataList.cycleCount ++;
@@ -112,7 +112,7 @@ static void test_start(){
     settime(testDataList.startTime, sizeof(testDataList.startTime));
 
     if(netflowtest.durationTime == 0){
-        LogWrite(WARN,"durationTime will set 60s.");
+        //LogWrite(WARN,"durationTime will set 60s.");
         testDataList.stopTime = time((time_t*)NULL) + 60000;
     }else{
         testDataList.stopTime = time((time_t*)NULL) + netflowtest.durationTime * 1000;
@@ -147,7 +147,7 @@ static void checkSpace(){
 static void initList(){
     testDataList.datalist = (testData*)malloc(sizeof(testData)*BASEINC);
     if(testDataList.datalist == NULL){
-        LogWrite(ERROR,"Malloc %d space for test fail!",sizeof(testData)*BASEINC);
+        //LogWrite(ERROR,"Malloc %d space for test fail!",sizeof(testData)*BASEINC);
         exit(-1);
     }
 

@@ -96,7 +96,6 @@ static void settime(){
     strftime(loging.logtime,20,"%Y-%m-%d %H:%M:%S",localtime(&timer));
 }
  
-/* 不定参打印 */
 static void PrintfLog(char * fromat,va_list args){
     int d;
     char c,*s;
@@ -137,7 +136,7 @@ static void PrintfLog(char * fromat,va_list args){
     }
     fprintf(loging.logfile,"%s","]\n");
 }
- 
+
 static int initlog(unsigned char loglevel){
     char strdate[30]={0x0};
 
@@ -199,5 +198,5 @@ int LogWrite(unsigned char loglevel,char *fromat,...){
 }
 
 void logDecollator(){
-    LogWrite(INFO,"=======================================================");
+    //LogWrite(INFO,"=======================================================");
 }

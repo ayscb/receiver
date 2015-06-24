@@ -43,6 +43,6 @@ typedef struct logseting{
  
 int LogWrite(unsigned char loglevel,char *fromat,...);
 
-void setLogConfPath( char* path ); // path==NULL -->current dir
+void setLogConfPath( char* path );    // path==NULL -->current dir
 void logDecollator();
 #endif

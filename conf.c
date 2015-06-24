@@ -140,7 +140,7 @@ static void setVariable(char* key, char* value){
 }
 
 static void readConfFile(){
-    LogWrite(INFO,"Try to read conf file %s",filePath[0]);
+    //LogWrite(INFO,"Try to read conf file %s",filePath[0]);
 
     //load default value
     defaultValue();
@@ -152,7 +152,7 @@ static void readConfFile(){
     // file exist
     FILE* fp =fopen(filePath[0],"r");
     if( fp == NULL ){
-        LogWrite(ERROR,"Open %s Fail! %s",strerror(errno));
+        //LogWrite(ERROR,"Open %s Fail! %s",strerror(errno));
         exit (-1) ;
     }
 
@@ -174,28 +174,28 @@ static void readConfFile(){
         memset(line, 0, 100);
     }
     fclose(fp);
-    LogWrite(INFO,"Read %s file finished!",filePath[0]);
+    //LogWrite(INFO,"Read %s file finished!",filePath[0]);
 }
 
 static void readMasterFile(){
-    LogWrite(INFO,"Try to read master file %s",filePath[1]);
+    //LogWrite(INFO,"Try to read master file %s",filePath[1]);
     if( !access(filePath[1],F_OK)==0) {
-        LogWrite(ERROR,"Read file %s %s!",filePath[1], strerror(errno));
+        //LogWrite(ERROR,"Read file %s %s!",filePath[1], strerror(errno));
         return;
     }
 
     FILE* fp =fopen(filePath[1],"r");
     if( fp == NULL ){
-        LogWrite(ERROR,"Open %s Fail! %s",filePath[1],strerror(errno));
+        //LogWrite(ERROR,"Open %s Fail! %s",filePath[1],strerror(errno));
         exit (-1) ;
     }
     
     int rows = getRealRowsNum(fp);
     if( rows == 0 ){
-        LogWrite(ERROR,"No master address ! Please check !\n");
+        //LogWrite(ERROR,"No master address ! Please check !\n");
         exit (-1) ;
     }
-    LogWrite(INFO, "Total master's number is: %d", rows);
+    //LogWrite(INFO, "Total master's number is: %d", rows);
 
     // malloc masterList
     masterList.masterIP = (struct sockaddr_in *)malloc(rows * sizeof(struct sockaddr_in));
@@ -217,13 +217,13 @@ static void readMasterFile(){
         ip = del_both_trim(ip);
         
         setAddress( masterList.masterIP + masterList.masterNum, ip, port );
-        LogWrite(INFO, "Master number %d : %s:%d",masterList.masterNum, ip, port);
+        //LogWrite(INFO, "Master number %d : %s:%d",masterList.masterNum, ip, port);
         masterList.masterNum ++ ;
         
         memset(line, 0, 100);
     }
     fclose(fp);
-    LogWrite(INFO,"Read %s file finished!",filePath[1]);
+    //LogWrite(INFO,"Read %s file finished!",filePath[1]);
 }
 
 

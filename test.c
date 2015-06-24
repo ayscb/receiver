@@ -4,29 +4,28 @@
 	> Mail: 
 	> Created Time: Tue 19 May 2015 09:15:42 AM PDT
  ************************************************************************/
-#include "test.h"
-
 #include "receiver.h"
 #include "conf.h"
-#include "datalist.h"
-#include "load.h"
 
 #include <stdio.h> 
-#include <pthread.h>
+#include <stdlib.h>
+#include <string.h>
 
 int main( int argc, char ** args ){
 
-    pthread_t ptid;
     configure();
-    test_loadData();
     initClient();
-
-   pthread_create(&ptid, NULL, test_sendData, NULL);
-   
+    
+   testData hdr;
+   memset(hdr.data,0, sizeof(hdr.data));
+   hdr.data[0] = 9;
+   hdr.data[1] = 11;
+   hdr.data[1] = 11;
+   hdr.length = sizeof(hdr.data);
+    
     while(1){
      //   struct ether_hdr* hdr = getData();
-        testData* hdr = readData();
-        struct buffer_s* sendDataBuf = fillNetflowData_test(hdr);
+        struct buffer_s* sendDataBuf = fillNetflowData(&hdr);
         runClient(sendDataBuf);
     }
     return 0;

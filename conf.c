@@ -5,13 +5,14 @@
 	> Created Time: Tue 19 May 2015 11:04:34 PM PDT
  ************************************************************************/
 #include "conf.h"
-#include "log.h"
 #include "utils.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <ctype.h>		//isblank()
 #include <errno.h>
+#include <unistd.h>                     // access
 
 // filePath[0] ---> netflow.conf   NETFLOW_CONF_HOME
 // filePath[1] ---> master
@@ -33,7 +34,6 @@ void configure(){
     getfilePath();
     readConfFile();
     readMasterFile();
-    logDecollator();
 }
 
 //***************************************************
@@ -57,10 +57,6 @@ static void getfilePath(){
     // get master file
     strncpy(filePath[1], confFile, sizeof(filePath[1])); 
     strcat(filePath[1],"/master");
-
-    // get log.conf
-    strcat(confFile,"/log.conf");
-    setLogConfPath( confFile);
 }
 
 static int isSkipRow(char* line ){
@@ -124,23 +120,9 @@ static void setVariable(char* key, char* value){
             netflowConf.showCount =-1;
         }
     }
-
-    // for test
-    if(strcasecmp(key,"testLoadData")==0){
-        strcpy(netflowtest.testLoadData,value);
-    }else if(strcasecmp(key,"testLoadTemp")==0){
-        strcpy(netflowtest.testLoadTemp,value);
-    }else if(strcasecmp(key,"testLoadMix")==0){
-        strcpy(netflowtest.testLoadMix,value);
-    }else if(strcasecmp(key,"rate")==0){
-        netflowtest.rate = atoi(value);
-    }else if(strcasecmp(key,"durationTime")==0){
-        netflowtest.durationTime = atoi(value);
-    }
 }
 
 static void readConfFile(){
-    //LogWrite(INFO,"Try to read conf file %s",filePath[0]);
 
     //load default value
     defaultValue();
@@ -178,24 +160,19 @@ static void readConfFile(){
 }
 
 static void readMasterFile(){
-    //LogWrite(INFO,"Try to read master file %s",filePath[1]);
     if( !access(filePath[1],F_OK)==0) {
-        //LogWrite(ERROR,"Read file %s %s!",filePath[1], strerror(errno));
         return;
     }
 
     FILE* fp =fopen(filePath[1],"r");
     if( fp == NULL ){
-        //LogWrite(ERROR,"Open %s Fail! %s",filePath[1],strerror(errno));
         exit (-1) ;
     }
     
     int rows = getRealRowsNum(fp);
     if( rows == 0 ){
-        //LogWrite(ERROR,"No master address ! Please check !\n");
         exit (-1) ;
     }
-    //LogWrite(INFO, "Total master's number is: %d", rows);
 
     // malloc masterList
     masterList.masterIP = (struct sockaddr_in *)malloc(rows * sizeof(struct sockaddr_in));
@@ -217,13 +194,10 @@ static void readMasterFile(){
         ip = del_both_trim(ip);
         
         setAddress( masterList.masterIP + masterList.masterNum, ip, port );
-        //LogWrite(INFO, "Master number %d : %s:%d",masterList.masterNum, ip, port);
-        masterList.masterNum ++ ;
-        
+        masterList.masterNum ++ ;     
         memset(line, 0, 100);
     }
     fclose(fp);
-    //LogWrite(INFO,"Read %s file finished!",filePath[1]);
 }
 
 

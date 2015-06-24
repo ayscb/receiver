@@ -6,18 +6,25 @@
  ************************************************************************/
 #include  "receiver.h"
 
-#include "log.h"
 #include "conf.h"
 #include "utils.h"
-#include "datalist.h"
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
 #include <fcntl.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <arpa/inet.h>
+
 #include <errno.h>
 #include <memory.h>
-#include <netinet/tcp.h> 
-#include <signal.h>  
+
+#include <unistd.h>
+#include <signal.h> 
 
 #define DEFAULT_BUFFER 1600
 #define DEFAULT_WORKER_BASE_NUM 5
@@ -28,7 +35,6 @@ typedef enum{ connected, connecting, closed, retry, failed, fd_error} m_status;
 //**********************************************************
 //      Persional Variabe Definition
 //**********************************************************
-
 static struct command_t{
     char req_worklist[6];       // $req$   请求worker的格式 
     char delim[2];                  // &
@@ -83,10 +89,10 @@ static long t_i = 0;
 //      Persional Function Statement
 //**********************************************************
 
-static void initCmd();
-static void initMasterClient();
-static void initWorkerList();
-static m_status tryConnectMaster();
+static void initCmd(void);
+static void initMasterClient(void);
+static void initWorkerList(void);
+static m_status tryConnectMaster(void);
 static m_status trySingleMasterConnect(struct sockaddr_in* ip);
 static int setTcpKeepAlive(int fd, int start, int interval, int count);
 
@@ -95,26 +101,24 @@ static void updateMaxfd(int currfd);
 static int resetFdset(struct buffer_s* data);
 static int resetMasterFdSet(int curfd);
 static int resetWorkerFdset(int curfd, struct buffer_s* data);
-static void dealWithMasterSet();
-static void dealWithWorkerSet();
+static void dealWithMasterSet(void);
+static void dealWithWorkerSet(struct buffer_s* data);
 static void dealWithMasterData(char* masterData, int len);
 
 static void updateWorkerList(char* workerList, int len);
 static int resetWorkListSpace(int needNum);
 static void addNewConnect(char* ip, int index);
 static void deleExistConnect(int index);
-static void updateActiveClientfd();
-static void retryConnectMaster();
+static void updateActiveClientfd(void);
+static void retryConnectMaster(void);
 static void removeWorker(int activeIdx);
-static int createSocket();
-static void printCountLog();
-static void getCountInfo();
+static int createSocket(void);
 
 //**********************************************************
 //      Global Function Implement
 //**********************************************************
 
-void initClient() {
+void initClient(void) {
     printf("Start to run receiver component....\n");
     initCmd();
     initMasterClient();
@@ -129,63 +133,23 @@ void runClient(struct buffer_s* data){
         int no = select(maxfd, &readSet, &writeSet, NULL, &select_tm );
         switch(no){
             case -1 : 
-                //LogWrite(ERROR,"The receiver select error!! %s ...",strerror(errno));
+                printf("The receiver select error!! %s ...",strerror(errno));
                 break ;
             case 0 : 
                 if(masterStatus.status == retry || masterStatus.status == connecting){
                     retryConnectMaster();
                 }
                 break ;
-            default:    
-                //LogWrite(DEBUG,"ReadSet and WriteSet is available. readSet=%d,writeSet=%d",readSet,writeSet);                     
+            default:                 
                 dealWithMasterSet();
                 dealWithWorkerSet(data);
         }
 }
 
-//struct buffer_s* fillNetflowData(struct ether_hdr* eth_hdr) {
-//    // TODO here we will get the netflow data
-//    if(eth_hdr){
-//        return NULL;
-//    }
-//    struct ipv4_hdr *ip_hdr = (struct ipv4_hdr *)(eth_hdr + 1);
-//    uint8_t ip_len = (ip_hdr->version_ihl & 0xf) * 4;                
-//    struct udp_hdr* u_hdr = (struct udp_hdr *)((u_char *)ip_hdr + ip_len);
-//    uint16_t payload_shift = sizeof(struct udp_hdr);
-//    uint16_t payload_len = udp_hdr->dgram_len;
-//    NetFlow5Record* 5Record = (NetFlow5Record *)((u_char *)u_hdr + payload_shift); 
-//                      
-//    //  data format :
-//    // totalLen(1int) + ipflage(1byte) + ipAddress(4|16Byte) + netflowData(nByte)
-//    short ipLen = ( ip_hdr->version_ihl >> 4 ) == 4 ? 4 : 16;
-//    short totalLen = sizeof(short) + sizeof(char) + ipLen + (short)payload_len;
-//    if(buffer.buffMaxLen <  totalLen){
-//        free(buffer.buff);
-//        buffer.buff = (char*)malloc( totalLen);
-//        if(buffer.buff == NULL){
-//                return NULL;
-//        }
-//        buffer.buffMaxLen = totalLen;
-//    }
-//
-//    char* p = buffer.buff;
-//    memcpy(p, &totalLen, sizeof(short));    
-//    p = p + sizeof(short);
-//    
-//    *p = (char)ipLen;
-//    p ++;
-//    
-//    memcpy(p, ip_hdr->???, ipLen);    // src IP
-//    p = p + ipLen;
-//    
-//    memcpy(p, 5Record, payload_len);
-//    buffer.bufflen = totalLen;
-//    return &buffer;
-//}
-
-struct buffer_s* fillNetflowData_test(testData* eth_hdr) {
+#ifdef TEST
+struct buffer_s* fillNetflowData(testData* eth_hdr) {
     // TODO here we will get the netflow data
-    if(eth_hdr == NULL){
+    if(!eth_hdr ){
         return NULL;
     }
                       
@@ -220,11 +184,52 @@ struct buffer_s* fillNetflowData_test(testData* eth_hdr) {
     sendbuffer.bufflen = totalLen;
     return &sendbuffer;
 }
+#else
+    struct buffer_s* fillNetflowData(struct ether_hdr* eth_hdr) {
+         // TODO here we will get the netflow data
+        if(!eth_hdr){
+            return NULL;
+        }
+        struct ipv4_hdr *ip_hdr = (struct ipv4_hdr *)(eth_hdr + 1);
+        uint8_t ip_len = (ip_hdr->version_ihl & 0xf) * 4;                
+        struct udp_hdr* u_hdr = (struct udp_hdr *)((u_char *)ip_hdr + ip_len);
+        uint16_t payload_shift = sizeof(struct udp_hdr);
+        uint16_t payload_len = udp_hdr->dgram_len;
+        u_char *the5Record = (u_char *)u_hdr + payload_shift; 
+        //  data format :
+        // totalLen(1int) + ipflage(1byte) + ipAddress(4|16Byte) + netflowData(nByte)
+        short ipLen = ( ip_hdr->version_ihl >> 4 ) == 4 ? 4 : 16;
+        short totalLen = sizeof(short) + sizeof(char) + ipLen + (short)payload_len;
+        if(buffer.buffMaxLen <  totalLen){
+            free(buffer.buff);
+            buffer.buff = (char*)malloc( totalLen);
+            if(buffer.buff == NULL){
+                    return NULL;
+            }
+            buffer.buffMaxLen = totalLen;
+        }
+
+        char* p = buffer.buff;
+        memcpy(p, &totalLen, sizeof(short));    
+        p = p + sizeof(short);
+
+        *p = (char)ipLen;
+        p ++;
+
+        memcpy(p, (void *)&src_ip, ipLen);    // src IP
+        p = p + ipLen;
+
+        memcpy(p, the5Record, payload_len);
+        buffer.bufflen = totalLen;
+        return &buffer;
+    }
+    
+#endif
 
 //**********************************************************
 //      Persional Function Implement
 //**********************************************************
-static void initCmd(){
+static void initCmd(void){
     strcpy(command.req_worklist,"$req$");
     strcpy(command.delim,"&");
     strcpy(command.req_report,"$report$");
@@ -237,16 +242,13 @@ static void initCmd(){
     
 }
 
-static void initMasterClient(){
+static void initMasterClient(void){
     printf("Try to connect with master client.\n");
-    //LogWrite(INFO, "Start to run master client.");
     if(tryConnectMaster() != connected){
         printf("There is no master to connect, the receiver will quit.\n");
-        //LogWrite(ERROR, "There is no master to connect, the receiver will quit.");
         exit(-1);
     }else{
         printf("Master connected!\n");
-        //LogWrite(INFO, "Master connected!");
     }
 }
 
@@ -263,7 +265,6 @@ static void initWorkerList(){
 
     worker_list.maxNum = defaultNum;
     worker_list.activeNum = 0;
-    //LogWrite(INFO, "Init worker List!");
 }
 
 /*
@@ -273,7 +274,7 @@ static void initWorkerList(){
  *              failed:
  *              connected:
  */
-static m_status tryConnectMaster(){
+static m_status tryConnectMaster(void){
     int maxRetryNum = netflowConf.totalMaxTryNum;
     //LogWrite(INFO, "Max retry number is %d times.", maxRetryNum);
     //LogWrite(INFO, "Registed %d masters.", masterList.masterNum);
@@ -292,13 +293,11 @@ static m_status tryConnectMaster(){
             m_status st = trySingleMasterConnect(ip);
             if( st == connected ){
                 masterStatus.status = connected;
-                logDecollator();
                 return connected;
             }else{
                 masteridx ++;                      
             }
         } 
-        logDecollator(); 
         tryidx++;
     }
     masterStatus.status = failed;
@@ -318,16 +317,19 @@ static m_status trySingleMasterConnect(struct sockaddr_in* ip){
     masterStatus.m_clientfd = createSocket();
     if( masterStatus.m_clientfd == -1){
         //LogWrite(ERROR, "Init master client's socket error, %s", strerror(errno));
+        printf("Init master client's socket error, %s", strerror(errno));
         return fd_error;
     }
 
     int res = connect(masterStatus.m_clientfd,  (struct sockaddr*)ip, sizeof(struct sockaddr) );
                 
     if(res == 0){
+        printf("Connected, Master is %s", inet_ntoa(ip->sin_addr));
         //LogWrite(INFO, "Connected, Master is %s", inet_ntoa(ip->sin_addr));       
         return connected;
     }else{
         if(errno != EINPROGRESS){
+            printf("Connect failed. %s", strerror(errno));
             //LogWrite(INFO, "Connect failed. %s", strerror(errno));
             close(masterStatus.m_clientfd);
             return failed;
@@ -337,7 +339,6 @@ static m_status trySingleMasterConnect(struct sockaddr_in* ip){
     struct timeval tv; 
     tv.tv_sec = netflowConf.singleWaitSecond;
     tv.tv_usec = 0;
-    //LogWrite(INFO, "Try  wait %ds time. ", tv.tv_sec);
 
     errno = 0;
     FD_ZERO(&readSet);
@@ -349,6 +350,7 @@ static m_status trySingleMasterConnect(struct sockaddr_in* ip){
     switch(res){
         case -1:
             //LogWrite(ERROR, "Select error in connect ... %s",strerror(errno)); 
+            printf("Select error in connect ... %s",strerror(errno));
             close(masterStatus.m_clientfd);
             return failed; 
 
@@ -362,14 +364,17 @@ static m_status trySingleMasterConnect(struct sockaddr_in* ip){
                 int no = connect(masterStatus.m_clientfd, (struct sockaddr*)ip, sizeof(struct sockaddr));      
                 if( no == 0){
                     //LogWrite(INFO, "Connected, Master is %s", inet_ntoa(ip->sin_addr));
+                    printf("Connected, Master is %s", inet_ntoa(ip->sin_addr));
                     return connected;  
                 }else{
                     int err = errno;
-                    if( err == EISCONN ){    
+                    if( err == EISCONN ){                 
                         //LogWrite(INFO, "Connected, Master is %s", inet_ntoa(ip->sin_addr));
+                        printf("Connected, Master is %s", inet_ntoa(ip->sin_addr));
                         return connected;   
                     }else{   
                         //LogWrite(INFO, "Connect failed! %s %d", strerror(err), err);
+                        printf("Connect failed! %s %d", strerror(err), err);
                         close(masterStatus.m_clientfd);                  
                         return failed;
                     }  
@@ -494,17 +499,15 @@ static int resetWorkerFdset(int curfd, struct buffer_s* data){
         int idx = worker_list.active_to_idx[i];
         int fd = worker_list.c_clientfd[idx];
         FD_SET(fd, &readSet);
-   //     //LogWrite(DEBUG,"FD_SET-worker_fd(%d)-readSet",fd);
         if(data != NULL){
             FD_SET(fd, &writeSet);
-            //LogWrite(DEBUG,"FD_SET-worker_fd(%d)-writeSet",fd);
         }           
         maxfd = maxfd > fd  ? maxfd : fd;
     }
     return maxfd;
 }
 
-static void dealWithMasterSet(){
+static void dealWithMasterSet(void){
     
     if(FD_ISSET(masterStatus.m_clientfd, &readSet)){
         //LogWrite(DEBUG,"Deal with command data from master(readSet).");
@@ -516,10 +519,9 @@ static void dealWithMasterSet(){
                 int readCount = recv(masterStatus.m_clientfd, 
                         masterStatus.recvBuff, sizeof(masterStatus.recvBuff), 0);
 
-                if( readCount == -1 || readCount == 0 ){        // failed connection           
-                        //LogWrite(WARN,"Disconnect with master[error: %s]，"
-                         //       "and will retry to connect with master.", strerror(errno)); 
-                        
+                if( readCount == -1 || readCount == 0 ){        // failed connection          
+                    printf("Disconnect with master[error: %s]，and will retry to connect with master.", 
+                            strerror(errno));                     
                         close(masterStatus.m_clientfd);
                         masterStatus.status = retry;
                                         
@@ -527,19 +529,15 @@ static void dealWithMasterSet(){
                         masterStatus.retryMasteridx = 0;                         
                         retryConnectMaster();                 
                 }else{
-                     //LogWrite(DEBUG,"read from tcp server, the data is %s",masterStatus.recvBuff);
                     dealWithMasterData(masterStatus.recvBuff,readCount);
                 }              
                 break;
                 
             case retry:
             case connecting :
-                 //LogWrite(DEBUG,"Master is lost, and retry to connecte.");
                  retryConnectMaster();
                  break;       
             default:            
-                 //LogWrite(ERROR,"There is no available master to connect with. "
-                   //      "Since we skip all disconnected masters, so this message should not been seen!");
                 printf("There is no available master to connect with");
         }
     }
@@ -557,14 +555,12 @@ static void dealWithMasterSet(){
                     send(masterStatus.m_clientfd, masterStatus.sendBuff, masterStatus.sendLen, 0);
                 char* bp = masterStatus.sendBuff;
                 while(countNum != masterStatus.sendLen ){
-                    if( countNum == -1){        
-                        //LogWrite(ERROR,"Connect master error. %s",strerror(errno));
+                    if( countNum == -1){     
+                        printf("Connect master error. %s",strerror(errno));
                         close(masterStatus.m_clientfd);
                         masterStatus.status = retry;
                         retryConnectMaster();                
                     }else{
-                        //LogWrite(WARN,"Send to master total data %d, actual data %d.", 
-                           //     masterStatus.sendLen, countNum);
                         bp = bp + countNum;
                         countNum = send(masterStatus.m_clientfd, bp, masterStatus.sendLen - countNum, 0);
                     }
@@ -583,73 +579,40 @@ static void dealWithWorkerSet(struct buffer_s* data){
         int idx = worker_list.active_to_idx[worker_idx];
         int fd = worker_list.c_clientfd[idx];
 
-        //LogWrite(DEBUG,"DealWithWorkerSet! activeNum=%d, idx=%d, currfd=%d, IP=%s", 
-          //  worker_list.activeNum, idx, fd, worker_list.workerList[idx]);
-
         /* remove the disconnect socket */
         if( FD_ISSET(fd, &readSet)){         
             int readCount = recv(fd,masterStatus.recvBuff, sizeof(masterStatus.recvBuff), 
                     MSG_WAITALL|MSG_DONTWAIT );
 
-            //LogWrite(DEBUG,"worker read! errno=%d, errStr=%s, readCount=%d",
-           //     errno, strerror(errno), readCount);
-
-            if( readCount == -1 || readCount == 0 ){
-    //            if(errno == ECONNRESET ){                
-                    //LogWrite(WARN,"Disconnect with worker %s",worker_list.workerList[idx]); 
+            if( readCount == -1 || readCount == 0 ){       
+                printf("Disconnect with worker %s",worker_list.workerList[idx]);
                     FD_CLR(fd,&writeSet);
                     shutdown(fd,SHUT_WR);
                     close(fd);
-                    printCountLog();
 
                 // If there is only one worker connected with this receiver, we must request a new worker.
                 // If there is more than one workers, ignore the request.
                 if( worker_list.activeNum == 1 ){
                     requestMaster(worker_list.workerList[idx]);
-                    //LogWrite(WARN, "There is no available worker to send netflow data to. "
-                     //       "So request worker list to master.");              
+                    printf("There is no available worker to send netflow data to.  "
+                            "So request worker list to master.");           
                 } 
-
-                //TODO : here, we will modify the worker_list.activeNum.
-                // Here has a small bug. 
-                // Suppose some assigned values:  current worker_list.activeNum = 5 , worker_idx =3.
-                // when we remove a dead worker, the worker_list.activeNum = 4,
-                // but now worker_idx will be set 4 after the "while" circulation,
-                // that means we will skip a active worker.
                 removeWorker(worker_idx);   
-        //        }
             }
         }
-        
-      //  if(data == NULL){
-     //       //LogWrite(INFO,"data is null");
-     //       printf("data is null \n");
-      //      return;
-     //   }
 
         /* write the netflow package to worker*/
-        if( FD_ISSET(fd, &writeSet)){
-            //LogWrite(DEBUG,"worker write! errno=%d, errStr=%s currIdx %d, connected %d",
-           //     errno, strerror(errno), idx, worker_list.workersStatus[idx]);
-    
-            statistic.intervalPackageCount ++;
-            
+        if( FD_ISSET(fd, &writeSet)){ 
             int no = send(fd, data->buff, data->bufflen, 0);
-//            //LogWrite(DEBUG,"worker write! send data count =%d, errno=%d", no,errno);
 
             while( no != data->bufflen){
                 if( no == -1){               
-                    //LogWrite(ERROR,"Send %s data error.",inet_ntoa(worker_list.workerIP[idx].sin_addr));
-                    statistic.intervalPackageMiss ++;
+                    printf("Send %s data error.",inet_ntoa(worker_list.workerIP[idx].sin_addr));
                     break;
                 }else{
-                    //LogWrite(WARN,"Send to %s total data %d, actual data %d.", 
-                       //     inet_ntoa(worker_list.workerIP[idx].sin_addr), data->bufflen, no);
-                    no = send(fd, data->buff + no, (size_t)(data->bufflen - no), 0);
+                    no += send(fd, data->buff + no, (size_t)(data->bufflen - no), 0);
                 }
             }
-            
-       //     printf("%d worker write! send data count =%d, errno=%s\n",++t_i, no, strerror(errno));
         }
         worker_idx ++;
     }
@@ -663,7 +626,6 @@ static void dealWithMasterData(char* masterData, int len){
     if( strncasecmp(p, command.res_prefix, strlen(command.res_prefix)) == 0 ){
         updateWorkerList(p,len);        
     }else if( strncasecmp(p, command.req_report, strlen(command.req_report)) == 0){
-        getCountInfo();
         masterStatus.report = on;
     }
 }
@@ -699,7 +661,6 @@ static void updateWorkerList(char* workerList, int len){
         
         switch(mode){
             case '+' :{
-                //LogWrite(INFO,"Add new workerIPs, total worker num is %d", num);
 
                 /* update the maxNum */
                 if( resetWorkListSpace(num) != 0)
@@ -739,7 +700,6 @@ static void updateWorkerList(char* workerList, int len){
                 break;
             }
             case '-':{
-            //     LogWrite(INFO,"Delete exist workerIP , worker num : %d\n", num);
                  count = 0;
                 while(count != num){
                      ip_port = strtok(NULL, command.delim);
@@ -761,7 +721,6 @@ static void updateWorkerList(char* workerList, int len){
             }
                
             default :
-                //LogWrite(WARN,"Wrong Data format!");
                 printf("Wrong Data format!");
         }
     }
@@ -777,7 +736,6 @@ static int resetWorkListSpace(int needNum){
         worker_list.c_clientfd = (int*)realloc(worker_list.c_clientfd, newSize);
         worker_list.workerIP = (struct sockaddr_in*)realloc(worker_list.workerIP, newSize);
         if( worker_list.workerList == NULL || worker_list.c_clientfd == NULL || worker_list.workerIP == NULL){
-            //LogWrite(ERROR,"Realloc size error.");
             return -1;
         }
         memset(worker_list.workerList + worker_list.maxNum, 0, adjustSize);
@@ -801,12 +759,10 @@ static void addNewConnect(char* ip_port, int index){
 
     worker_list.c_clientfd[index] = createSocket();
     if( worker_list.c_clientfd[index] == -1 ){
-        //LogWrite(WARN,"Create new socket for %s:%d error, %s ", ip_port, port, strerror(errno));
         return ;
     }
     connect(worker_list.c_clientfd[index], (struct sockaddr *)(worker_list.workerIP + index), 
             sizeof(struct sockaddr));
-    //LogWrite(INFO,"Add the workerIP, fd=%d is %s:%d", worker_list.c_clientfd[index], ip_port, port);
     printf("Add the workerIP, fd=%d ip=%s:%d\n", index, ip_port, port);
     worker_list.activeNum ++ ;
     worker_list.workersStatus[index] = connecting;
@@ -825,7 +781,7 @@ static void deleExistConnect(int index){
     worker_list.workersStatus[index] = closed;
 }
 
-static void updateActiveClientfd(){
+static void updateActiveClientfd(void){
     //TODO: here should be more effective
     free(worker_list.active_to_idx);
     worker_list.active_to_idx = (int*)malloc(sizeof(int) * worker_list.activeNum);
@@ -838,8 +794,6 @@ static void updateActiveClientfd(){
             worker_list.active_to_idx[active_idx] = i;
             active_idx ++;
             if( active_idx > worker_list.activeNum ){
-                //LogWrite(ERROR,"The active num in worker list is error. Expect size is %d.",
-                 //       worker_list.activeNum);
                 return;
             }
         }
@@ -849,11 +803,11 @@ static void updateActiveClientfd(){
 
 //----------------------- disconnected and retry ---------------------------------------------
 /* disconnected and retry  */
-static void retryConnectMaster(){
+static void retryConnectMaster(void){
     if(masterStatus.status == retry){
         masterStatus.m_clientfd =  createSocket();
         if( masterStatus.m_clientfd == -1){
-            //LogWrite(WARN, "Init master client's socket error, %s", strerror(errno));
+            printf("Init master client's socket error, %s", strerror(errno));
             masterStatus.status = fd_error;
         }else{
             masterStatus.status = connecting;
@@ -862,7 +816,7 @@ static void retryConnectMaster(){
     struct sockaddr_in* ip = masterList.masterIP + masterStatus.retryMasteridx;
     int res =  connect(masterStatus.m_clientfd, (struct sockaddr *)ip, sizeof(struct sockaddr));
     if( res == 0 ){
-            //LogWrite(INFO, "Connected immediately. Master is %s, res=0", inet_ntoa(ip->sin_addr) );
+        printf("Connected immediately. Master is %s, res=0", inet_ntoa(ip->sin_addr) );
             masterStatus.status = connected;
             requestMaster(NULL);
             return;
@@ -871,39 +825,37 @@ static void retryConnectMaster(){
     int err = errno;
     switch(err){
         case EISCONN :
-            //LogWrite(INFO, "Connected. Master is %s", inet_ntoa(ip->sin_addr) );  
+            printf("Connected. Master is %s", inet_ntoa(ip->sin_addr));
             masterStatus.status = connected;
             requestMaster(NULL);
             break;
         case EINPROGRESS :
-             //LogWrite(INFO,"Connecting %s ...error %s",inet_ntoa(ip->sin_addr),strerror(errno));
+            printf("Connecting %s ...error %s",inet_ntoa(ip->sin_addr),strerror(errno));
             masterStatus.status = connecting;
             break;
         case EALREADY:
-             //LogWrite(INFO,"Connecting %s, errno = %d ",inet_ntoa(ip->sin_addr),strerror(errno),errno);
+            printf("Connecting %s, errno = %s, %d ",inet_ntoa(ip->sin_addr),strerror(errno),errno);
              masterStatus.status = connecting;
              break;
         default:
             close(masterStatus.m_clientfd);   // close current fd.
            
             if( masterStatus.retryMasteridx == masterList.masterNum ){
-                //LogWrite(INFO,"Connect %s failed. errno = %d . %s. ",
-             //           inet_ntoa(ip->sin_addr), errno, strerror(errno));             
+                printf("Connect %s failed. errno = %d . %s. ",
+                        inet_ntoa(ip->sin_addr), errno, strerror(errno));      
                 masterStatus.retryMasteridx = 0;
                 masterStatus.retryTimes ++;
                 
                  if( masterStatus.retryTimes == netflowConf.totalMaxTryNum ){
-                    //LogWrite(ERROR,"There is no aliving LoadMaster to connect with."); 
+                     printf("There is no aliving LoadMaster to connect with.");
                     masterStatus.status = failed;
                 }else{
-                    logDecollator();
-                    //LogWrite(INFO,"Try %dth times to connect LoadMaster.",masterStatus.retryTimes);
+                    printf("Try %dth times to connect LoadMaster.",masterStatus.retryTimes);
                     masterStatus.status = retry;
-                }
-                
+                }            
              }else{
-                //LogWrite(INFO,"Connect %s failed. Errno = %d. %s, change another LoadMaster. ",
-               //         inet_ntoa(ip->sin_addr), errno, strerror(errno)); 
+                printf("Connect %s failed. Errno = %d. %s, change another LoadMaster. ",
+                        inet_ntoa(ip->sin_addr), errno, strerror(errno));
                 masterStatus.retryMasteridx ++;
                 masterStatus.status = retry;
             }              
@@ -913,8 +865,6 @@ static void retryConnectMaster(){
 /* remove dead worker from active worker list */
 static void removeWorker(int dead_active_Idx){
     if( dead_active_Idx >= worker_list.activeNum ){
-        //LogWrite(ERROR, "The active idx %d should not >= max active number workers",
-          //      dead_active_Idx,worker_list.activeNum);
         return;
     }
     int id = worker_list.active_to_idx[dead_active_Idx];
@@ -931,52 +881,12 @@ static void removeWorker(int dead_active_Idx){
     }
 }
 
-static int createSocket(){
+static int createSocket(void){
     int tcpfd = socket ( AF_INET, SOCK_STREAM, 0 );
     int flags = fcntl(tcpfd, F_GETFL, 0);
     if( flags < 0 ){
-        //LogWrite(ERROR, "Set tcp's flag NO_BLOCK error!");
         return -1;
     }
     fcntl(tcpfd, F_SETFL, flags | O_NONBLOCK);
-    //LogWrite(INFO, "Set tcp' socket flag : NO_BLOCK");
     return tcpfd;
-}
-
-//--------------------------- deal with log --------------------------------------------------
-static void printCountLog(){
-    if(netflowConf.showCount ==-1)
-        return;
-    if(statistic.intervalPackageCount == netflowConf.countIntervalNum ){
-        char now[10]={0};
-        getShortTime(now, 10);
-        //LogWrite(INFO, "## %s --> %s Total package num : %d  sended num: %d missed num: %d. ## ", 
-        //    statistic.startT,now, statistic.intervalPackageCount, 
-       //     (statistic.intervalPackageCount-statistic.intervalPackageMiss), 
-      //      statistic.intervalPackageMiss);
-        strcpy(statistic.startT,now);
-        
-        long TB=1099511627776;
-        statistic.totalPackageCount += statistic.intervalPackageCount;
-        if( statistic.totalPackageCount >= TB ){
-            statistic.totalPackageT ++;
-            statistic.totalPackageCount = statistic.totalPackageCount - TB;
-        }
-        statistic.intervalPackageCount = 0;
-
-        if(statistic.intervalPackageMiss != 0){
-            statistic.totalMissCount += statistic.intervalPackageMiss;
-            if( statistic.totalMissCount >= TB ){
-                statistic.totalMissCount ++;
-                statistic.totalMissCount = statistic.totalMissCount - TB;
-            }
-            statistic.intervalPackageMiss = 0;
-        }       
-    }
-}
-
-static void getCountInfo(){
-    // TODO: write the report into masterStatus.sendBuff
-    memset(masterStatus.sendBuff, 0, sizeof(masterStatus.sendBuff));
-    strcpy(masterStatus.sendBuff,"dataInfo");
 }

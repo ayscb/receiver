@@ -19,7 +19,6 @@
 static char filePath[2][100];
 
 //***************************************************
-
 static void getfilePath();
 static int isSkipRow(char* line );
 static int getRealRowsNum( FILE* fp );
@@ -120,6 +119,15 @@ static void setVariable(char* key, char* value){
             netflowConf.showCount =-1;
         }
     }
+    
+    // for test
+    if(strcasecmp(key,"testLoadData")==0){
+        strcpy(netflowtest.testLoadData,value);
+    }else if(strcasecmp(key,"testLoadTemp")==0){
+        strcpy(netflowtest.testLoadTemp,value);
+    }else if(strcasecmp(key,"testLoadMix")==0){
+        strcpy(netflowtest.testLoadMix,value);
+    }
 }
 
 static void readConfFile(){
@@ -199,5 +207,3 @@ static void readMasterFile(){
     }
     fclose(fp);
 }
-
-

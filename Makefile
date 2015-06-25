@@ -1,7 +1,7 @@
 
 
 TARGET=receiver
-OBJ=receiver.o test.c conf.o utils.o
+OBJ=receiver.o test.c conf.o utils.o load.o
 CC=gcc
 DEBUG=-g
 
@@ -13,7 +13,10 @@ receiver.o : receiver.c  conf.h utils.h
 
 conf.o : conf.c utils.h
 	${CC} ${DEBUG} -c $<
-
+	
+load.o: load.c conf.h
+	${CC} ${DEBUG} -c $<
+	
 utils.o : utils.c
 	${CC} ${DEBUG} -c $<
 

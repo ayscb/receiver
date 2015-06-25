@@ -19,4 +19,8 @@ void setAddress(struct sockaddr_in* add, char* ip, int port);
 char* getLongTime(char* timeBuff, int len);		// %Y-%m-%d %H:%M:%S
 char* getShortTime(char* timeBuff, int len);		// %H:%M:%S
 
+int* getGroupDataPos(char* data, int* num);
+int* getInnerDataPos(char* data, int* num);
+void requestWorkerIPs(char* removeIP_port, char* data, unsigned short  * len);
+enum type{ workerlistMsg=1,ruleMsg, reqIps };
 #endif

@@ -8,19 +8,21 @@
 #ifndef _LOAD_H
 #define _LOAD_H
 
+#include <stdint.h>
+
 #define BASEINC 1000000
 
 typedef struct {
     char data[1500];
-    int length;
+    uint16_t length;
 } testData;
 
 struct {
     testData* datalist;
-    int maxNum;
-    int totalNum;
-    int currId;
-    int cycleCount;
+    uint32_t maxNum;
+    uint32_t totalNum;
+    uint32_t currId;
+    uint32_t cycleCount;
 } testDataList;
 
 void test_loadData();

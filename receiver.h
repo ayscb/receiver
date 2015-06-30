@@ -8,10 +8,11 @@
 #ifndef _RECEIVER_H
 #define _RECEIVER_H
 
-#define TEST
+#include "common.h"
 
 #ifdef TEST
 #include "load.h"
+#include "log.h"
 #else
 #include <rte_ether.h>
 #include <rte_ip.h>
@@ -19,13 +20,13 @@
 #endif
 
 typedef struct buffer_s {
-    char* buff;
-    int bufflen;
-    int buffMaxLen;
+    u_char* buff;
+    uint32_t bufflen;
+    uint32_t buffMaxLen;
 } buffer_s;
 
-void initClient();
-int runClient(struct buffer_s* data);
+BOOLEAN initClient(void) ;
+BOOLEAN runClient(struct buffer_s* data);
 
 #ifdef TEST
 struct buffer_s* fillNetflowData(testData* eth_hdr);

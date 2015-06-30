@@ -12,12 +12,14 @@
 #include <string.h>
 #include <errno.h>
 
-//***************************************************
+//**********************************************************
+//      Persional Function Statement
+//**********************************************************
 static void checkSpace();
 
-//***************************************************
-//      Global function
-//***************************************************
+//**********************************************************
+//      Global Function Implement
+//**********************************************************
 
 void test_loadData() {
     testDataList.datalist = (testData*) malloc(sizeof (testData) * BASEINC);
@@ -31,8 +33,8 @@ void test_loadData() {
     files[1] = netflowtest.testLoadMix;
     files[2] = netflowtest.testLoadData;
 
-    int i = 0;
-    short length = 0;
+    uint32_t i = 0;
+    uint16_t length = 0;
     for (; i < 3; i++) {
         if (strlen(files[i]) == 0) {
             continue;
@@ -47,7 +49,7 @@ void test_loadData() {
             // read the data
             checkSpace();
 
-            fread(&length, sizeof (short), 1, fp); // length dees not include itself
+            fread(&length, sizeof (uint16_t), 1, fp); // length dees not include itself
             length = ntohs(length); //  length
             if (length > 1480 || length <= 0) {
                 // skip the data
@@ -73,12 +75,6 @@ void test_loadData() {
 
 testData* getData() {
     testData* data = testDataList.datalist + testDataList.currId;
-    unsigned int time = *((unsigned int*) (data->data + 8));
-    unsigned int h_time = ntohl(time);
-    h_time + testDataList.cycleCount * 10 * 60 * 1000;
-    time = htonl(h_time);
-    memcpy(data->data + 8, &time, sizeof (unsigned int));
-
     testDataList.currId++;
     if (testDataList.currId == testDataList.totalNum) {
         testDataList.cycleCount++;
@@ -87,9 +83,9 @@ testData* getData() {
     return data;
 }
 
-//***************************************************
-//      personal function
-//***************************************************
+//**********************************************************
+//      Persional Function Statement
+//**********************************************************
 
 static void checkSpace() {
     if (testDataList.totalNum == testDataList.maxNum) {

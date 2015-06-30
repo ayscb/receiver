@@ -8,24 +8,22 @@
 #ifndef _CONF_H
 #define _CONF_H
 
+#include "common.h"
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
 struct {
-    struct sockaddr_in * masterIP;
-    int masterNum;
+    struct sockaddr_in * masterIP;      //  current master list
+    uint32_t masterNum;                      //  total master number
 } masterList;
 
 struct {
-    int singleWaitSecond;
-
-    int totalMaxTryNum;
-    int receiverWaitSecond;
-
-    long countIntervalNum;
-    int showCount;		// 1 true 0 fasle
+    uint32_t singleWaitSecond;
+    uint32_t totalMaxTryNum;
+    uint32_t receiverWaitSecond;
 }netflowConf;
 
 struct {
@@ -34,6 +32,6 @@ struct {
     char testLoadMix[100];
 }netflowtest;
 
-void configure();
-void setAddress( struct sockaddr_in* add, char* ip, int port );
+BOOLEAN configure(void);
+
 #endif

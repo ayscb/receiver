@@ -8,19 +8,23 @@
 #ifndef _UTILS_H
 #define _UTILS_H
 
+#include <stdint.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 	
+enum type{ workerlistMsg = 1,ruleMsg, reqIps };
+
 char * del_left_trim(char *str);
 char * del_both_trim(char * str);
-void setAddress(struct sockaddr_in* add, char* ip, int port);
-char* getLongTime(char* timeBuff, int len);		// %Y-%m-%d %H:%M:%S
-char* getShortTime(char* timeBuff, int len);		// %H:%M:%S
+void setAddress(struct sockaddr_in* add, char* ip, uint16_t port);
+char* getLongTime(char* timeBuff, uint8_t buffLen);		// %Y-%m-%d %H:%M:%S
+char* getShortTime(char* timeBuff, uint8_t buffLen);		// %H:%M:%S
 
-int* getGroupDataPos(char* data, int* num);
-int* getInnerDataPos(char* data, int* num);
-void requestWorkerIPs(char* removeIP_port, char* data, unsigned short  * len);
-enum type{ workerlistMsg=1,ruleMsg, reqIps };
+uint8_t vaildMasterMessage(char* data);
+uint16_t* getGroupDataPos(char* data, uint16_t dataLen, uint32_t* out_groupNum);
+uint16_t* getInnerDataPos(char* data, uint32_t* out_groupNum);
+void requestWorkerIPs(char* removeIP_port, char* out_data, uint16_t * out_dataLen);
+
 #endif

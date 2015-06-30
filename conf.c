@@ -14,136 +14,80 @@
 #include <errno.h>
 #include <unistd.h>                     // access
 
+//**********************************************************
+//      Persional Variabe Definition
+//**********************************************************
+
 // filePath[0] ---> netflow.conf   NETFLOW_CONF_HOME
 // filePath[1] ---> master
 static char filePath[2][100];
 
-//***************************************************
-static void getfilePath();
-static int isSkipRow(char* line );
-static int getRealRowsNum( FILE* fp );
-static void defaultValue();
-static void readConfFile();
-static void readMasterFile();
+//**********************************************************
+//      Persional Function Statement
+//**********************************************************
+static void getfilePath(void);
+static BOOLEAN isSkipRow(char* line );
+static uint32_t getRealRowsNum( FILE* fp );
+static void defaultValue(void);
+static void setVariable(char* key, char* value);
+static BOOLEAN readConfFile(void);
+static BOOLEAN readMasterFile(void);
 
-//***************************************************
-//		Global function
-//***************************************************
-void configure(){
+//**********************************************************
+//      Global Function Implement
+//**********************************************************
+BOOLEAN configure(void){
     getfilePath();
-    readConfFile();
-    readMasterFile();
+    if(!readConfFile() || !readMasterFile()){
+        return FALSE;
+    }else{
+        return TRUE;
+    }
 }
 
-//***************************************************
-//		personal function
-//***************************************************
-static void getfilePath(){
-    // get netflow.conf file
-    char confFile[512]={0x0};
+//**********************************************************
+//      Persional Function Implement
+//**********************************************************
+static void getfilePath(void){
+    
+    // get configure directory path
     char* file = getenv("NETFLOW_CONF_HOME");
     if( file == NULL ){
-            getcwd(confFile, sizeof(confFile));
-            strcat(confFile,"/conf");
+        char* homePath = getenv("NETFLOW_HOME");
+        if(homePath == NULL){
+            strncpy(filePath[0], homePath, strlen(homePath));
+        }else{
+            getcwd(filePath[0], sizeof(filePath[0]));
+        }
+        strcat(filePath[0],"/conf");
     }else{
-            strncpy(confFile, file, sizeof(confFile));
+            strncpy(filePath[0], file, strlen(file));
     }
 
-    // get netflow.conf
-    strncpy(filePath[0], confFile, sizeof(filePath[0]));      
+    strncpy(filePath[1], filePath[0], strlen(filePath[0]));   
+    
+    // get netflow.conf  
     strcat(filePath[0],"/netflow.conf");
 
     // get master file
-    strncpy(filePath[1], confFile, sizeof(filePath[1])); 
     strcat(filePath[1],"/master");
 }
 
-static int isSkipRow(char* line ){
-    char* p = line;
-    p = del_left_trim(p);
-
-    // skip ' '、 \t 、 \r 、 \n 、 \v 、 \f 
-    if( isspace(p[0]) )
-            return 1;
-    if( p[0] == '#')
-            return 1;
-    return 0;
-}
-
-static int getRealRowsNum( FILE* fp ){
-    int rows = 0;
-    long filePos = ftell(fp);
-    char tmp[200];
-    while(fgets( tmp, 200, fp )!= NULL ){
-        if( isSkipRow(tmp))
-                continue;
-        rows ++;
-        memset( tmp, 0, 200 );
-    }
-    fseek(fp, filePos, SEEK_SET );
-    return rows;
-}
-
-static void defaultValue(){
-    if(netflowConf.singleWaitSecond == 0)
-            netflowConf.singleWaitSecond = 40;		
-    if(netflowConf.totalMaxTryNum==0)
-            netflowConf.totalMaxTryNum = 5;	
-    if(netflowConf.receiverWaitSecond==0)
-            netflowConf.receiverWaitSecond = 20;
-    if(netflowConf.countIntervalNum==0)
-            netflowConf.countIntervalNum = 100000;
-    if(netflowConf.showCount==0)
-            netflowConf.showCount = 1;
-}
-
-static void setVariable(char* key, char* value){
-    char* _key = key;
-    _key = del_both_trim(_key);
-    char* _value = value;
-    _value = del_both_trim(_value);
-
-    if(strcasecmp(key,"singleWaitSecond")==0){
-        netflowConf.singleWaitSecond = atoi(value);
-    }else if(strcasecmp(key,"totalMaxTryNum")==0){
-        netflowConf.totalMaxTryNum = atoi(value);
-    }else if(strcasecmp(key,"receiverWaitSecond")==0){
-        netflowConf.receiverWaitSecond = atoi(value);
-    }else if(strcasecmp(key,"countIntervalNum")==0){
-        netflowConf.countIntervalNum = atol(value);
-    }else if(strcasecmp(key,"showCount")==0){
-        char * val = del_both_trim(value);
-        if(strcasecmp(val,"true")==0){
-            netflowConf.showCount =1;
-        }else{
-            netflowConf.showCount =-1;
-        }
-    }
-    
-    // for test
-    if(strcasecmp(key,"testLoadData")==0){
-        strcpy(netflowtest.testLoadData,value);
-    }else if(strcasecmp(key,"testLoadTemp")==0){
-        strcpy(netflowtest.testLoadTemp,value);
-    }else if(strcasecmp(key,"testLoadMix")==0){
-        strcpy(netflowtest.testLoadMix,value);
-    }
-}
-
-static void readConfFile(){
+static BOOLEAN readConfFile(void){
 
     //load default value
     defaultValue();
 
     // if file does not exist
-    if( !access(filePath[0],F_OK)==0) 
-        return ;
+    if( !access(filePath[0],F_OK)==0)  {
+        return FALSE ;
+    }
 
     // file exist
     FILE* fp =fopen(filePath[0],"r");
     if( fp == NULL ){
         //LogWrite(ERROR,"Open %s Fail! %s",strerror(errno));
-        exit (-1) ;
+        return FALSE ;
     }
 
     // read data
@@ -164,22 +108,23 @@ static void readConfFile(){
         memset(line, 0, 100);
     }
     fclose(fp);
+    return TRUE;
     //LogWrite(INFO,"Read %s file finished!",filePath[0]);
 }
 
-static void readMasterFile(){
-    if( !access(filePath[1],F_OK)==0) {
-        return;
+static BOOLEAN readMasterFile(void){
+    if( !access(filePath[1],F_OK)==0)  {
+        return FALSE;
     }
 
     FILE* fp =fopen(filePath[1],"r");
-    if( fp == NULL ){
-        exit (-1) ;
+    if( fp == NULL ) {
+        return FALSE;
     }
     
-    int rows = getRealRowsNum(fp);
+    uint32_t rows = getRealRowsNum(fp);
     if( rows == 0 ){
-        exit (-1) ;
+         return FALSE;
     }
 
     // malloc masterList
@@ -206,4 +151,62 @@ static void readMasterFile(){
         memset(line, 0, 100);
     }
     fclose(fp);
+    return TRUE;
 }
+
+static BOOLEAN isSkipRow(char* line ){
+    char* p = line;
+    p = del_left_trim(p);   // skip " "
+
+    // skip ' '、 \t 、 \r 、 \n 、 \v 、 \f 
+    if( isspace(p[0]) ) return TRUE;
+    if( p[0] == '#') return TRUE;
+    return FALSE;
+}
+
+static uint32_t getRealRowsNum( FILE* fp ){
+    uint32_t rows = 0;
+    long filePos = ftell(fp);
+    char tmp[200];
+    while(fgets( tmp, 200, fp )!= NULL ){
+        if( isSkipRow(tmp)) continue;
+        rows ++;
+        memset( tmp, 0, 200 );
+    }
+    fseek(fp, filePos, SEEK_SET );
+    return rows;
+}
+
+static void defaultValue(void){
+    if(netflowConf.singleWaitSecond == 0)   
+        netflowConf.singleWaitSecond = 40;		
+    if(netflowConf.totalMaxTryNum==0)
+        netflowConf.totalMaxTryNum = 5;	
+    if(netflowConf.receiverWaitSecond==0)
+        netflowConf.receiverWaitSecond = 20;
+}
+
+static void setVariable(char* key, char* value){
+    char* _key = key;
+    _key = del_both_trim(_key);
+    char* _value = value;
+    _value = del_both_trim(_value);
+
+    if(strcasecmp(key,"singleWaitSecond")==0){
+        netflowConf.singleWaitSecond = atoi(value);
+    }else if(strcasecmp(key,"totalMaxTryNum")==0){
+        netflowConf.totalMaxTryNum = atoi(value);
+    }else if(strcasecmp(key,"receiverWaitSecond")==0){
+        netflowConf.receiverWaitSecond = atoi(value);
+    }
+    
+    // for test
+    if(strcasecmp(key,"testLoadData")==0){
+        strcpy(netflowtest.testLoadData,value);
+    }else if(strcasecmp(key,"testLoadTemp")==0){
+        strcpy(netflowtest.testLoadTemp,value);
+    }else if(strcasecmp(key,"testLoadMix")==0){
+        strcpy(netflowtest.testLoadMix,value);
+    }
+}
+

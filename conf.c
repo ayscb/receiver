@@ -51,10 +51,10 @@ BOOLEAN configure(void){
 static void getfilePath(void){
     
     // get configure directory path
-    char* file = getenv("NETFLOW_CONF_HOME");
+    char* file = getenv("NETFLOW_COLLECTOR_CONF_DIR");
     if( file == NULL ){
-        char* homePath = getenv("NETFLOW_HOME");
-        if(homePath == NULL){
+        char* homePath = getenv("NETFLOW__COLLECTOR_HOME");
+        if(homePath != NULL){
             strncpy(filePath[0], homePath, strlen(homePath));
         }else{
             getcwd(filePath[0], sizeof(filePath[0]));
@@ -86,6 +86,7 @@ static BOOLEAN readConfFile(void){
     // file exist
     FILE* fp =fopen(filePath[0],"r");
     if( fp == NULL ){
+        printf("Can not open file %s", filePath[0]);
         //LogWrite(ERROR,"Open %s Fail! %s",strerror(errno));
         return FALSE ;
     }

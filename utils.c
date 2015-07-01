@@ -135,9 +135,9 @@ void requestWorkerIPs(char* removeIP_port, char* out_data, uint16_t * out_dataLe
         
         strcpy(out_data+offset, removeIP_port);
         offset += strlen(removeIP_port);
-        printf("Request worker list from master, except %s\n", removeIP_port);
+        printf("Request worker list from master, except %s , str =' %s'\n", removeIP_port, out_data + sizeof(uint16_t));
     } else {
-        printf("Request worker list from master.\n");
+        printf("Request worker list from master. str = '%s' \n", out_data + sizeof(uint16_t));
     }
     *out_dataLen = offset;
 }

@@ -28,6 +28,6 @@ typedef struct node{
 
 node_t* search(char* key) ;
 void update_hash(char *update_router, char *update_node) ;
-void displayHashTable();
+void displayHashTable(void);
 
 #endif	/* HASH_H */

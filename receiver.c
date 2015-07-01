@@ -1,7 +1,7 @@
 /*************************************************************************
         > File Name: receiver.c
-        > Author: 
-        > Mail: 
+        > Author:
+        > Mail:
         > Created Time: Thu 14 May 2015 06:44:40 AM PDT
  ************************************************************************/
 #include  "receiver.h"
@@ -9,7 +9,9 @@
 #include "conf.h"
 #include "utils.h"
 #include "hash.h"
+#ifdef LOG
 #include "log.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,7 +28,7 @@
 #include <errno.h>
 #include <memory.h>
 #include <unistd.h>
-#include <signal.h> 
+#include <signal.h>
 
 #define DEFAULT_BUFFER 1600
 #define DEFAULT_WORKER_BASE_NUM 5
@@ -46,7 +48,7 @@ static struct worker_list_t {
     char** workerList;                           // IP string , like "1.2.3.4:10010"
     int* c_clientfd;                                 // the point to client fd ( map to workerList one by one )
     struct sockaddr_in* workerIP;       // ip Address
-    m_status* workersStatus;              // worker status  
+    m_status* workersStatus;              // worker status
     uint32_t maxNum;                          // the size of workerList we have malloc
 
     uint32_t activeNum;                       // the number of the workers that is active
@@ -154,7 +156,7 @@ BOOLEAN runClient(struct buffer_s* data) {
 struct buffer_s* fillNetflowData(testData* eth_hdr) {
     // TODO here we will get the netflow data
     if (!eth_hdr)   return NULL;
-    
+
     //  data format :
     // totalLen(1int) + ipflage(1byte) + ipAddress(4|16Byte) + netflowData(nByte)
     uint16_t payload_len = (uint16_t) eth_hdr->length;
@@ -191,20 +193,20 @@ struct buffer_s* fillNetflowData(testData* eth_hdr) {
 struct buffer_s* fillNetflowData(struct ether_hdr* eth_hdr) {
     // TODO here we will get the netflow data
     if (!eth_hdr)  return NULL;
-    
+
     struct ipv4_hdr *ip_hdr = (struct ipv4_hdr *) (eth_hdr + 1);
     uint8_t ip_len = (ip_hdr->version_ihl & 0xf) * 4;
-    //uint32_t src_ip = rte_be_to_cpu_32(ip_hdr->src_addr);       
+    //uint32_t src_ip = rte_be_to_cpu_32(ip_hdr->src_addr);
     uint32_t src_ip = ip_hdr->src_addr;
     struct udp_hdr* u_hdr = (struct udp_hdr *) ((u_char *) ip_hdr + ip_len);
     uint16_t payload_shift = sizeof (struct udp_hdr);
     uint16_t payload_len = u_hdr->dgram_len - sizeof(struct udp_hdr);
     u_char *the5Record = (u_char *) u_hdr + payload_shift;
-    
+
     //  datalen(1int) + ipflage(1byte) + ipAddress(4|16Byte) + netflowData(nByte)
     uint8_t ip_type = (ip_hdr->version_ihl >> 4) == 4 ? 4 : 16;
     uint16_t totalLen = sizeof (uint16_t) + sizeof (uint8_t) + ip_type + payload_len;
-    
+
     if (sendbuffer.buffMaxLen < totalLen) {
         free(sendbuffer.buff);
         sendbuffer.buff = (u_char*) malloc(totalLen);
@@ -246,10 +248,15 @@ static BOOLEAN initSendBuff(void) {
 static BOOLEAN initMasterClient(void) {
     printf("Try to connect with master client.\n");
     if (tryConnectMaster() != connected) {
+        printf("There is no master to connect, the receiver will quit\n");
+#ifdef LOG
         LogWrite(INFO,"There is no master to connect, the receiver will quit\n");
+#endif
         return FALSE;
     } else {
+#ifdef LOG
         LogWrite(INFO,"Master connected\n");
+#endif
         return TRUE;
     }
 }
@@ -258,17 +265,17 @@ static BOOLEAN initMasterClient(void) {
 
     worker_list.baseIncNum = DEFAULT_WORKER_BASE_NUM;
     int defaultNum = worker_list.baseIncNum;
-    worker_list.workerList = (char**) malloc(sizeof (char*) * defaultNum); 
+    worker_list.workerList = (char**) malloc(sizeof (char*) * defaultNum);
     worker_list.c_clientfd = (int*) malloc(sizeof (int)* defaultNum);
     worker_list.workerIP = (struct sockaddr_in*) malloc(sizeof (struct sockaddr_in)* defaultNum);
     worker_list.workersStatus = (m_status*) malloc(sizeof (m_status) * defaultNum);
-    if(worker_list.workerList == NULL || 
+    if(worker_list.workerList == NULL ||
             worker_list.c_clientfd == NULL ||
             worker_list.workerIP == NULL ||
             worker_list.workersStatus == NULL){
         return FALSE;
     }
-    
+
     memset(worker_list.workerList, 0, sizeof (char*)*defaultNum);
     worker_list.maxNum = defaultNum;
     worker_list.activeNum = 0;
@@ -278,7 +285,7 @@ static BOOLEAN initMasterClient(void) {
  /**
  *  set the tcp keep alive
  * @param fd
- * @return 
+ * @return
  */
 static BOOLEAN setTcpKeepAlive(int fd, int start, int interval, int count) {
     int keepAlive = 1;
@@ -292,7 +299,7 @@ static BOOLEAN setTcpKeepAlive(int fd, int start, int interval, int count) {
         return FALSE;
     }
 
-    // set start time    
+    // set start time
     if (setsockopt(fd, SOL_TCP, TCP_KEEPIDLE, (void *) &start, sizeof (start)) == -1) {
         perror("setsockopt");
         return FALSE;
@@ -302,7 +309,7 @@ static BOOLEAN setTcpKeepAlive(int fd, int start, int interval, int count) {
         perror("setsockopt");
         return FALSE;
     }
-    //set max retry times  
+    //set max retry times
     if (setsockopt(fd, SOL_TCP, TCP_KEEPCNT, (void *) &count, sizeof (count)) == -1) {
         perror("setsockopt");
         return FALSE;
@@ -312,10 +319,10 @@ static BOOLEAN setTcpKeepAlive(int fd, int start, int interval, int count) {
 
  // ---------------------------------------------------------------------------------------------------------
  // connect with master
- 
+
  /**
   * Try connect with whole master
-  * @return m-status 
+  * @return m-status
   */
 static m_status tryConnectMaster(void) {
     uint16_t maxRetryNum = netflowConf.totalMaxTryNum;
@@ -325,7 +332,7 @@ static m_status tryConnectMaster(void) {
     LogWrite(INFO, "Max retry number is %d times.", maxRetryNum);
     LogWrite(INFO, "Registed %d masters.", masterList.masterNum);
 #endif
-    
+
     uint16_t tryidx = 0;
     while (tryidx != maxRetryNum) {
         printf("\nRetry %u times to connect with whole master!\n", tryidx + 1);
@@ -341,7 +348,7 @@ static m_status tryConnectMaster(void) {
 #ifdef LOG
             LogWrite(INFO,"try to connect with %s:%d", inet_ntoa(ip->sin_addr), ntohs(ip->sin_port));
 #endif
-            
+
             m_status st = trySingleMasterConnect(ip);
             if (st == connected) {
                 masterStatus.status = connected;
@@ -377,7 +384,7 @@ static m_status trySingleMasterConnect(struct sockaddr_in* ip) {
     if (res == 0) {
         printf("Connected, Master is %s\n", inet_ntoa(ip->sin_addr));
 #ifdef LOG
-        LogWrite(INFO, "Connected, Master is %s", inet_ntoa(ip->sin_addr));   
+        LogWrite(INFO, "Connected, Master is %s", inet_ntoa(ip->sin_addr));
 #endif
         return connected;
     } else {
@@ -405,7 +412,7 @@ static m_status trySingleMasterConnect(struct sockaddr_in* ip) {
     switch (res) {
             printf("Select error in connect ... %s\n", strerror(errno));
 #ifdef LOG
-            LogWrite(ERROR, "Select error in connect ... %s",strerror(errno)); 
+            LogWrite(ERROR, "Select error in connect ... %s",strerror(errno));
 #endif
             close(masterStatus.m_clientfd);
             return failed;
@@ -413,20 +420,19 @@ static m_status trySingleMasterConnect(struct sockaddr_in* ip) {
         case 0:
             printf("Select time out.\n");
 #ifdef LOG
-            LogWrite(INFO, "Select time out.");   
+            LogWrite(INFO, "Select time out.");
 #endif
             close(masterStatus.m_clientfd);
             return failed;
 
         default:
-            if (FD_ISSET(masterStatus.m_clientfd, &readSet) 
+            if (FD_ISSET(masterStatus.m_clientfd, &readSet)
                     || FD_ISSET(masterStatus.m_clientfd, &writeSet)) {
                 int no = connect(masterStatus.m_clientfd, (struct sockaddr*) ip, sizeof (struct sockaddr));
                 if (no == 0) {
 #ifdef LOG
                 LogWrite(INFO, "Connected, Master is %s", inet_ntoa(ip->sin_addr));
 #endif
-                    //LogWrite(INFO, "Connected, Master is %s", inet_ntoa(ip->sin_addr));
                     printf("Connected, Master is %s\n", inet_ntoa(ip->sin_addr));
                     return connected;
                 } else {
@@ -493,7 +499,7 @@ static void retryConnectMaster(void) {
         default:
             close(masterStatus.m_clientfd); // close current fd.
             masterStatus.retryMasteridx++;
-            
+
             if (masterStatus.retryMasteridx == masterList.masterNum) {
                 printf("Connect %s failed. errno = %d . %s. \n",
                         inet_ntoa(ip->sin_addr), errno, strerror(errno));
@@ -537,14 +543,18 @@ static int resetMasterFdSet(int curfd) {
     if (masterStatus.status == connected
             || masterStatus.status == retry
             || masterStatus.status == connecting) {
-        //LogWrite(DEBUG,"FD_SET-master_fd(%d)-readSet",masterStatus.m_clientfd);
+#ifdef LOG
+        LogWrite(DEBUG,"FD_SET-master_fd(%d)-readSet",masterStatus.m_clientfd);
+#endif
         FD_SET(masterStatus.m_clientfd, &readSet);
 
         if (masterStatus.report == on
                 || masterStatus.status == retry
                 || masterStatus.status == connecting) {
-            //LogWrite(DEBUG,"FD_SET-master_fd(%d)-writeSet",masterStatus.m_clientfd);
-            FD_SET(masterStatus.m_clientfd, &writeSet);
+#ifdef LOG
+        LogWrite(DEBUG,"FD_SET-master_fd(%d)-writeSet",masterStatus.m_clientfd);
+#endif       
+          FD_SET(masterStatus.m_clientfd, &writeSet);
         }
         return ( curfd > masterStatus.m_clientfd) ? curfd : masterStatus.m_clientfd;
     }
@@ -552,10 +562,10 @@ static int resetMasterFdSet(int curfd) {
 }
 
 static int resetWorkerFdset(int curfd, struct buffer_s* data) {
-    // Focus on readset & writeset. 
+    // Focus on readset & writeset.
     // ReadSet only for get the disconnect information, and WriteSet for write data.
     int maxfd = curfd;
-    int i;
+    uint32_t i;
     for (i = 0; i != worker_list.activeNum; i++) {
         int idx = worker_list.active_to_idx[i];
         int fd = worker_list.c_clientfd[idx];
@@ -569,21 +579,21 @@ static int resetWorkerFdset(int curfd, struct buffer_s* data) {
 static void dealWithMasterSet(void) {
 
     if (FD_ISSET(masterStatus.m_clientfd, &readSet)) {
-        //LogWrite(DEBUG,"Deal with command data from master(readSet).");
 
         switch (masterStatus.status) {
             case connected:
                 memset(masterStatus.recvBuff, 0, sizeof (masterStatus.recvBuff));
 
                 uint16_t totalLen;
-                recv(masterStatus.m_clientfd, &totalLen, sizeof(uint16_t), 0);
+                int readCount = recv(masterStatus.m_clientfd, &totalLen, sizeof(uint16_t), 0);
+                printf("totalLen = %d\n", totalLen);
                 totalLen = ntohs(totalLen) - 2;
+                printf("read total size %d,  read count %d\n", totalLen, readCount);
                 
                 int curNo = recv(masterStatus.m_clientfd, masterStatus.recvBuff, totalLen, 0 ) ;
                 while( curNo != totalLen){
-                     if (curNo == -1 || curNo == 0) { // failed connection          
-                        printf("Disconnect with master[error: %s]，and will retry to connect with master.\n",
-                                strerror(errno));
+                     if (curNo == -1 || curNo == 0) { // failed connection
+                        printf("Disconnect with master, and will retry to connect with master.\n");
                         close(masterStatus.m_clientfd);
                         masterStatus.status = retry;
 
@@ -595,7 +605,7 @@ static void dealWithMasterSet(void) {
                         curNo += recv(masterStatus.m_clientfd, masterStatus.recvBuff + curNo, totalLen - curNo, 0 ) ;
                     }
                 }
-                masterStatus.recvBuff[totalLen]='\0';
+             //   masterStatus.recvBuff[totalLen]='\0';
                 printf("Rece message from master, %s\n",masterStatus.recvBuff);
                dealWithMasterData(masterStatus.recvBuff, totalLen);
                 break;
@@ -604,15 +614,18 @@ static void dealWithMasterSet(void) {
             case connecting:
                 retryConnectMaster();
                 break;
-            case failed:
-                printf("current master connected failed.\n");
-                return;
-            case closed:
-                printf("current master has closed! There is no available master to connect with.\n");
-                return;
-            case fd_error:
-                printf("current master's fd is error! ");
-                return;
+            default:
+                printf("There is no available master to connect with.\n");
+//                
+//            case failed:
+//                printf("current master connected failed.\n");
+//                return;
+//            case closed:
+//                printf("current master has closed! There is no available master to connect with.\n");
+//                return;
+//            case fd_error:
+//                printf("current master's fd is error!\n ");
+//                return;
         }
     }
 
@@ -646,11 +659,11 @@ static void dealWithMasterSet(void) {
                 printf("current master connected failed.\n");
                 break;
             case closed:
-                printf("error! current master has closed! ");
+                printf("error! current master has closed!\n ");
                 break;
             case fd_error:
-                printf("current master's fd is error! ");
-                break;     
+                printf("current master's fd is error! \n");
+                break;
         }
     }
 }
@@ -665,13 +678,13 @@ static BOOLEAN dealWithWorkerSet(struct buffer_s* data) {
 
     /* remove the disconnect socket */
     if (FD_ISSET(fd, &readSet)) {
-        int readCount = 
+        int readCount =
         recv(fd, masterStatus.recvBuff, sizeof (masterStatus.recvBuff), MSG_WAITALL | MSG_DONTWAIT);
 
         if (readCount == -1 || readCount == 0) {
             printf("Disconnect with worker %s\n", worker_list.workerList[idx]);
             FD_CLR(fd, &writeSet);
-                
+
             // If there is only one worker connected with this receiver, we must request a new worker.
             // If there is more than one workers, ignore the request.
             if (worker_list.activeNum == 1) {
@@ -679,10 +692,10 @@ static BOOLEAN dealWithWorkerSet(struct buffer_s* data) {
                 printf("There is no available worker to send netflow data to.  "
                         "So request worker list to master.\n");
             }
-            
-            printf("[dealWithWorkerSet] delete unReachable worker %s\n ", worker_list.workerList[idx]);       
+
+            printf("[dealWithWorkerSet] delete unReachable worker %s\n ", worker_list.workerList[idx]);
             deleExistConnect(idx);
-            updateActiveClientfd();     
+            updateActiveClientfd();
             worker_idx++;
             return FALSE;
         }
@@ -692,7 +705,7 @@ static BOOLEAN dealWithWorkerSet(struct buffer_s* data) {
     if (FD_ISSET(fd, &writeSet)) {
         int no = send(fd, data->buff, data->bufflen, 0);
 
-        while (no != data->bufflen) {
+        while (no != (int)data->bufflen) {
             if (no == -1) {
                 printf("Send ip %s data error.\n", inet_ntoa(worker_list.workerIP[idx].sin_addr));
                 break;
@@ -708,12 +721,12 @@ static BOOLEAN dealWithWorkerSet(struct buffer_s* data) {
 
 /* analysis the data from master, and deal with the data*/
 /**
- * 
+ *
  *workerlistMsg  mode :
  *      $$1&+2;ip1:port;ip2:port     --> add new ip's address
  *      $$1&-1;ip1:port                      --> dele exist ip's address
  *      $$1&+2;ip1:port;ip2:port&-3;1p3:port;ip4:port  -->add and delete
- * 
+ *
  * ruleMsg mode:
  *      $$2&ip1:1;ip2:1;ip3:2&ipA,ipB
  * @param masterData
@@ -727,7 +740,7 @@ static void dealWithMasterData(char* masterData, uint32_t dataLen) {
         printf("Master message error. %s\n", masterData);
         return;
     }
-        
+
     uint16_t* pos = getGroupDataPos(data, dataLen, &totalNum);
     uint16_t* ppos = pos;
     if(pos == NULL) return;
@@ -751,7 +764,7 @@ static void dealWithMasterData(char* masterData, uint32_t dataLen) {
 }
 
 static void updateRule(char* key, char* value){
- //   update_hash(key,value);
+    update_hash(key,value);
     printf("%s-->%s\n",key, value);
 }
 
@@ -760,30 +773,30 @@ static void updateRule(char* key, char* value){
  *    mode :
  *      +2;ip1:port;ip2:port     --> add new ip's address
  *      -1;ip1:port                      --> dele exist ip's address
- * @param workerList  the data from master 
+ * @param workerList  the data from master
  */
 static void updateWorkerList(char* workerList) {
 
     uint32_t totalNum = 0;
     uint16_t* pos = getInnerDataPos(workerList, &totalNum);
     uint16_t* p = pos;
-    
+
     char mode = *(workerList + (*p));
     int num = atoi(workerList + (*p++) + 1);
     if( num == 0) return;
-    
+
     uint32_t curNum = 1;     // skip mode
     switch(mode){
         case '+':{
              /* update the maxNum */
             if ( resetWorkListSpace(num) == FALSE){
-                return;        
+                return;
             }
-            
+
             while(curNum < totalNum){
                 char* ip_port = workerList + (*p++);
-                         
-                int i;
+
+                uint32_t i;
                 //check if exist in current workerlist
                 if (worker_list.active_to_idx != NULL) {
                     for (i = 0; i < worker_list.activeNum; i++) {
@@ -794,7 +807,7 @@ static void updateWorkerList(char* workerList) {
                     }
                     // exist in current worker_list
                     if (i != worker_list.activeNum) {
-                        continue; 
+                        continue;
                     }
                 }
 
@@ -802,7 +815,7 @@ static void updateWorkerList(char* workerList) {
                 for (i = 0; i < worker_list.maxNum; i++) {
                     if (worker_list.workerList[i] == NULL) {    // find place to insert into
                         addNewConnect(ip_port, i);
-                        printf("[updateWorkerList] Add a new worker %s, current total active num is %d\n", 
+                        printf("[updateWorkerList] Add a new worker %s, current total active num is %d\n",
                                 ip_port, worker_list.activeNum);
                         break;
                     }
@@ -816,14 +829,14 @@ static void updateWorkerList(char* workerList) {
         case '-':{
             uint32_t maxNum =  worker_list.activeNum;
             while(curNum < totalNum){
-                char* ip_port = workerList + (*p++);               
-                int i = 0;
+                char* ip_port = workerList + (*p++);
+                uint32_t  i = 0;
                 for (; i < maxNum; i++) {
                     int idx = worker_list.active_to_idx[i];
                     if(worker_list.workerList[idx] == NULL) continue;
-                    if (strncasecmp(ip_port, worker_list.workerList[idx], strlen(ip_port)) == 0) {                                    
+                    if (strncasecmp(ip_port, worker_list.workerList[idx], strlen(ip_port)) == 0) {
                         deleExistConnect(idx);
-                          printf("[updateWorkerList] delete  ip %s, current active worker num %d\n", 
+                          printf("[updateWorkerList] delete  ip %s, current active worker num %d\n",
                                 ip_port, worker_list.activeNum);
                         break;
                     }
@@ -831,14 +844,14 @@ static void updateWorkerList(char* workerList) {
                 curNum ++;
             }
             updateActiveClientfd();
-            
+
             // check the current worker list
             if(worker_list.activeNum == 0){
                 requestMaster(NULL);
             }
         }
         break;
-        
+
         default:
             printf("Unknow format\n");
     }
@@ -854,8 +867,8 @@ static BOOLEAN resetWorkListSpace(uint32_t needNum) {
         worker_list.workerList = (char**) realloc(worker_list.workerList, newSize);
         worker_list.c_clientfd = (int*) realloc(worker_list.c_clientfd, newSize);
         worker_list.workerIP = (struct sockaddr_in*) realloc(worker_list.workerIP, newSize);
-        if (worker_list.workerList == NULL 
-                || worker_list.c_clientfd == NULL 
+        if (worker_list.workerList == NULL
+                || worker_list.c_clientfd == NULL
                 || worker_list.workerIP == NULL) {
             return FALSE;
         }
@@ -870,13 +883,13 @@ static BOOLEAN resetWorkListSpace(uint32_t needNum) {
 static int createSocket(void) {
     int tcpfd = socket(AF_INET, SOCK_STREAM, 0);
     if(tcpfd < 0)   return -1;
-    
+
     int flags = fcntl(tcpfd, F_GETFL, 0);
     if(flags < 0)   return -1;
-    
-    int fcn = fcntl(tcpfd, F_SETFL, flags | O_NONBLOCK); 
+
+    int fcn = fcntl(tcpfd, F_SETFL, flags | O_NONBLOCK);
     if(fcn < 0) return -1;
-    
+
      return tcpfd;
 }
 
@@ -884,13 +897,13 @@ static int createSocket(void) {
  *  The function for request the worker list. command may be like as follow  :
  *              1) $req$                                        --> request the worker list
  *              2) $req$-192.168.80.1:100020     -->request the worker list except 192.168.80.1:100020
- * @param removeIP_port  
+ * @param removeIP_port
  *          except removeIP_port, when request the worker list.  The value can be set NULL
  */
 static void requestMaster(char* removeIP_port) {
 
     requestWorkerIPs(removeIP_port, masterStatus.sendBuff, &masterStatus.sendLen);
-    
+
     // copy the length
     memcpy(masterStatus.sendBuff, &masterStatus.sendLen, sizeof (uint16_t));
     masterStatus.report = on;

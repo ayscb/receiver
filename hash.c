@@ -80,7 +80,7 @@ void update_hash(char *update_router, char *update_node) {
     pthread_mutex_unlock(&mut);         //unlock 
 }
 
-void displayHashTable(){
+void displayHashTable(void){
     node_t *np;
     uint32_t i;
     printf("------------ display result -------------");

@@ -10,7 +10,7 @@
 
 #include <stdint.h>
 #define TEST
-#define NLOG
+#define LOG
 
 #define TRUE 1
 #define FALSE 0

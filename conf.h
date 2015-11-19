@@ -30,6 +30,7 @@ struct {
     char testLoadData[100];
     char testLoadTemp[100];
     char testLoadMix[100];
+    char testLoadV5[100];
 }netflowtest;
 
 BOOLEAN configure(void);

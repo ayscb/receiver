@@ -4,7 +4,7 @@
         > Mail: 
         > Created Time: Wed 20 May 2015 08:06:54 AM PDT
  ************************************************************************/
-#include "load.h"
+#include "loadData.h"
 #include "conf.h"
 
 #include <stdio.h>
@@ -28,14 +28,15 @@ void test_loadData() {
         exit(-1);
     }
 
-    char* files[3];
-    files[0] = netflowtest.testLoadTemp; //load template first
-    files[1] = netflowtest.testLoadMix;
-    files[2] = netflowtest.testLoadData;
+    char* files[4];
+    files[0] = netflowtest.testLoadV5;
+    files[1] = netflowtest.testLoadTemp; //load template first
+    files[2] = netflowtest.testLoadMix;
+    files[3] = netflowtest.testLoadData;
 
     uint32_t i = 0;
     uint16_t length = 0;
-    for (; i < 3; i++) {
+    for (; i < 4; i++) {
         if (strlen(files[i]) == 0) {
             continue;
         }

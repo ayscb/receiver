@@ -7,85 +7,102 @@
  ************************************************************************/
 #include "log.h"
 
-#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <ctype.h>
 #include <sys/stat.h>       //mkdir
- #include <dirent.h>
 #include <sys/types.h> 
+#include <dirent.h>
+#include <unistd.h>
+#include <time.h>
+#include <stdarg.h>
+
+
+typedef enum LOGWRITE{NO_CONSOLE_FILE, CONSOLE_ONLY, FILE_ONLY, CONSOLE_FILE} writeType;
 
 typedef struct log{
-    char logtime[20];
-    char filepath[MAXFILEPATH];
-    FILE *fp;
+    char fileName[20];              // current log's time
+    char basepath[MAXFILEPATH];     // current log's file path
+    FILE *fp;                       // current log file point
 }LOG;
  
 typedef struct logseting{
-    char filepath[MAXFILEPATH];
-    unsigned int maxfilelen;
-    unsigned int curfileIdx;
-    unsigned char loglevelCode;
+    // log configuration file's path
+    char confFile[MAXFILEPATH];     
+    unsigned int maxfilelen;        // the max limit size of echo log file
+    unsigned int curfileIdx;        // current log file's suffix 
+    unsigned char loglevelCode;     // current log's level(hot code))
+    writeType method;
 }LOGSET;
+
 
 //**********************************************************
 //      Persional Variabe Definition
 //**********************************************************
 LOGSET logsetting;
-LOG loging;
-static char confFile[512]={0x0};
-const static char LogLevelText[5][8]={"NONE","ERROR","WARN","INFO","DEBUG"};
+LOG logs;
 
 //**********************************************************
 //      Persional Function Statement
 //**********************************************************
-static int menuToidx( int code );
-static unsigned char getLevelcode(char* path );
-static void getlogset(void);
-static int initlog(unsigned char logLevelCode);
-static void defaultValue(LOGSET* logset);
-static void setVariable(char* key, char* value, LOGSET* logset);
-static char * del_both_trim(char * str) ;
-static int isSkipRow(char* line );
+static char* codeToStr( const unsigned char code );
+static unsigned char getLevelcode(char* value);
+static writeType getWriterType(char* value);
+static void setConfigurePath(const char* path);
+static void loadDefaultSetting();
+static void setVariable(char* key, char* value);
+static void initLogSetting(void);
+static void setCurretnFile(void);
+static char* del_both_trim(char * str);
+static int isInvalidRow(char* row);
 
  //**********************************************************
 //      Global Function Implement
 //**********************************************************
- // home/ss/conf/log.conf
-void getConfPath(char* path ){
-    if(path != NULL){
-        strcpy(confFile, path);
-    }else{
-        getcwd(confFile, sizeof(confFile));    
-        strcat(confFile,"/conf/log.properties");
+
+void initLog(const char* configurationFile){
+    
+    // set configuration log file path
+    setConfigurePath(configurationFile);
+    initLogSetting();
+    
+    // mkdir log document
+    if( opendir(logs.basepath) == NULL ){
+        mkdir(logs.basepath, S_IRUSR | S_IWUSR | S_IXUSR);
     }
 }
 
-int LogWrite(unsigned char loglevel, char *format, ...){
-    va_list argList;
-
-    //init log
-    if(initlog(loglevel) == 0)  return -1;
-
-    //print log information
-    va_start(argList, format);
-    vfprintf(loging.fp, format, argList);
-    if((logsetting.loglevelCode  & 0x80) != 0){
-        vprintf(format, argList);
-    }
-    va_end(argList);
-
-    if(index(format, '\n') == 0){
-        if( (logsetting.loglevelCode  & 0x80) != 0){
-            printf("\n");
-        }
-        fprintf(loging.fp,"\n ");
+void LogWrite(const unsigned char loglevel,const char *format, ...){
+    
+    //
+    if(logsetting.method == NO_CONSOLE_FILE) return ;
+    if(logsetting.loglevelCode == NONE)    return ;
+    if((loglevel & logsetting.loglevelCode ) != loglevel)   return ;
+    
+    setCurretnFile();
+    
+    // get current time
+    time_t timer=time(NULL);
+    char curTime[20];
+    strftime(curTime, 20, "%Y-%m-%d %H:%M:%S", localtime(&timer));
+     
+    if(logsetting.method == FILE_ONLY || logsetting.method == CONSOLE_FILE){
+        fprintf(logs.fp,"[%s] [%s]: ",codeToStr(loglevel), curTime);
+        va_list argList;
+        va_start(argList, format);
+        vfprintf(logs.fp, format, argList);
+        va_end(argList);      
+        fflush(logs.fp);
     }
     
-    fflush(loging.fp);
-    if(loging.fp!=NULL)  fclose(loging.fp);
-    loging.fp=NULL;
-    return 0;
+    if(logsetting.method == CONSOLE_ONLY || logsetting.method == CONSOLE_FILE){
+        printf("[%s] [%s]: ",codeToStr(loglevel), curTime);
+        va_list argList;
+        va_start(argList, format);
+        vprintf(format, argList);
+        va_end(argList);
+    } 
 }
 
 void logDecollator(){
@@ -95,166 +112,164 @@ void logDecollator(){
  //**********************************************************
 //      Persional Function Implement
 //**********************************************************
-static int menuToidx( int code ){
+
+static char* codeToStr( const unsigned char code ){
     switch( code ){
-        case 0: return 0; 
-        case 1: return 1; 
-        case 2: return 2; 
-        case 4: return 3; 
-        case 8: return 4; 
-        default:
-                return 16;
+        case NONE:  return "NONE"; 
+        case ERROR: return "ERROR"; 
+        case WARN:  return "WARE"; 
+        case INFO:  return "INFO"; 
+        case DEBUG: return "DEBUG"; 
+        default: return "INFO";
     }
 }
 
-static unsigned char getLevelcode(char* value ){
+/*
+ * get the log level from configuration file
+ * 
+ * return: the combined level code
+ */
+static unsigned char getLevelcode(char* value){
     unsigned char code=255;
-    if(strcasecmp("NONE",value)==0)
-        code=0;     // 0  -->NONE 0
-    else if(strcasecmp ("ERROR",value)==0)
-        code=1;     // 1  -->ERROR 1
-    else if(strcasecmp ("WARN",value)==0)
-        code=3;     // 11   -->WARN 10 || ERROR 1
-    else if(strcasecmp ("INFO",value)==0)
-        code=7;     // 111  --->INFO 100 || WARN 10 || ERROR 1
-    else if(strcasecmp ("DEBUG",value)==0)
-        code=15;    // 1110 --->DEBUG 1000 || INFO 100 || WARN 10 || ERROR 1
-    else if(strcasecmp ("console",value)==0)
-        code= 0x80;
-    else
-        code=7;
+    if(strcasecmp("NONE",value)==0)         code = 0x0;   // 0000 0000 -.NONE 0
+    else if(strcasecmp ("ERROR",value)==0)  code = 0x01;  // 0000 0001 -.ERROR 1
+    else if(strcasecmp ("WARN",value)==0)   code = 0x03;  // 0000 0011 -.WARN 10 || ERROR 1
+    else if(strcasecmp ("INFO",value)==0)   code = 0x07;  // 0000 0111 -.INFO 100 || WARN 10 || ERROR 1
+    else if(strcasecmp ("DEBUG",value)==0)  code = 0x15;  // 0000 1111 -.DEBUG 1000 || INFO 100 || WARN 10 || ERROR 1
+    else if(strcasecmp ("console",value)==0) code = 0x80; // 1000 0000 -.printf
+    else code=7;
     return code;
 } 
 
-static void getlogset(void){
-    defaultValue(&logsetting);
-    
-    if(strlen(confFile) == 0)  {
-        printf("Will load default log set.\n");
-        return;
+static writeType getWriterType(char* value){
+    if(strcasecmp("NONE",value)==0)          return NO_CONSOLE_FILE;  
+    else if(strcasecmp ("CONSOLE",value)==0) return CONSOLE_ONLY;  
+    else if(strcasecmp ("FILE",value)==0)    return FILE_ONLY;  
+    else if(strcasecmp ("ALL",value)==0)     return CONSOLE_FILE;
+    else return FILE_ONLY;
+}
+
+ // home/ss/conf/log.conf
+static void setConfigurePath(const char* path ){
+    if(path != NULL){
+        strcpy(logsetting.confFile, path);
+    }else{
+        getcwd(logsetting.confFile, sizeof(logsetting.confFile));
+        strcat(logsetting.confFile,"/conf/log.properties");
     }
+}
+
+static void loadDefaultSetting(){
+    logsetting.curfileIdx = 0;
+    logsetting.maxfilelen = 10 * 1024 * 1024;      // 10MB
+    logsetting.loglevelCode = getLevelcode("INFO");
+    logsetting.method = CONSOLE_ONLY;
+
+    getcwd(logs.basepath, sizeof(logs.basepath));
+    strcat(logs.basepath, "/log/");
+}
+
+static void setVariable(char* key, char* value){
+    char* _key = key;
+    char* _value = value;
     
-    FILE *fp = fopen(confFile,"r");
-    if(fp==NULL)  {
-        printf("Can not open file %s\n", confFile);
-        return ; 
+    _key = del_both_trim(_key);   
+    _value = del_both_trim(_value);
+
+    if(strcasecmp(key,"logpath")==0){
+        strcpy(logs.basepath, _value);
+        strcat(logs.basepath,"/");
+    }else if(strcasecmp(key,"level")==0){
+        logsetting.loglevelCode = getLevelcode(_value);
+    }else if(strcasecmp(key,"method")==0){
+        logsetting.method = getWriterType(_value);
+    }else if(strcasecmp(key,"maxfilelen")==0){
+        logsetting.maxfilelen = atoi(_value);
+    }
+}
+
+static void initLogSetting(void){
+    loadDefaultSetting(&logsetting);
+     
+    FILE *fp = fopen(logsetting.confFile,"r");
+    if(fp == NULL)  {
+        printf("Can not open log configuration file %s, "
+                "will load default setting value.\n", logsetting.confFile);
+        return; 
     }
         
     char line[100]={0}; 
      while(fgets(line, sizeof(line), fp) != NULL){
-        if( isSkipRow(line) )   continue; 
+        if(isInvalidRow(line))   continue; 
 
-        char* pos = strchr(line, '=');
-        if( pos == NULL ) continue;
-
+        char* equalFlag = strchr(line, '=');
+        *equalFlag = '\0';
+        
         char* key = line;
-        char* value = pos+1;
-        *pos = '\0';
+        char* value =  equalFlag +1;       
         value[strlen(value)-1] = '\0';    // remove '\n'
 
-        setVariable(key, value, &logsetting);
+        setVariable(key, value);
         memset(line, 0, 100);
     }
 }
- 
-static int initlog(unsigned char logLevelCode){
-    char fileName[30]={0x0};
 
-    //init log information
-    if( strlen(logsetting.filepath) == 0 ){
-        getConfPath(NULL);
-        getlogset();
-    }
-    
-    // log level
-    if((logLevelCode & logsetting.loglevelCode ) != logLevelCode || (logsetting.loglevelCode & 0x7F) == 0)
-        return 0;
- 
-    memset(&loging, 0, sizeof(LOG));
-    
-    //get current system time 
+static void setCurretnFile(void){
+    char logFileStr[50];
     time_t timer=time(NULL);
-    strftime(loging.logtime, 20, "%Y-%m-%d %H:%M:%S", localtime(&timer));
+    strftime(logFileStr,11,"%Y-%m-%d",localtime(&timer));
+    strcat(logFileStr,".log");
     
-    // get the log file name 
-    strftime(fileName,11,"%Y-%m-%d",localtime(&timer));
-    strcat(fileName,".log");
-
-    strncpy(loging.filepath, logsetting.filepath, strlen(logsetting.filepath));
-    
-    if( opendir(loging.filepath) == NULL ){
-        mkdir(loging.filepath, S_IRUSR | S_IWUSR | S_IXUSR);
+    if(logs.fp == NULL || strcasecmp (logFileStr, logs.fileName)!= 0){
+        char *logFile = 
+            (char*)malloc(strlen(logs.basepath)+strlen(logFileStr)+1);  
+        if (logFile == NULL) return;  
+  
+        strcpy(logFile, logs.basepath);  
+        strcat(logFile, logFileStr);  
+        if(logs.fp != NULL) fclose(logs.fp);
+        
+        logs.fp = fopen(logFile,"a+");
+        if(logs.fp == NULL)  {
+            printf("Can not open current logFile %s.\n ", logFile);
+        }
+        strcpy(logs.fileName, logFileStr);
+        free(logFile);
     }
-    
-    strcat(loging.filepath, fileName);
-
-    // open log file 
-    if(loging.fp == NULL)
-        loging.fp=fopen(loging.filepath, "a+");
-    
-    if(loging.fp == NULL){ 
-        perror("Open Log File Fail!");
-        return 0;
-    }
-    
-    // write log level and time to file 
-    fprintf(loging.fp,"[%s] [%s]: ",LogLevelText[menuToidx(logLevelCode)], loging.logtime);
-    return 1;
 }
  
-static void defaultValue(LOGSET* logset){
-    logset->curfileIdx = 0;
-    logset->maxfilelen = 10 * 1024 * 1024;
-    logset->loglevelCode = getLevelcode("INFO");
-    getcwd(logset->filepath, sizeof(logset->filepath));
-    strcat(logset->filepath, "/log/");
-}
-
-static void setVariable(char* key, char* value, LOGSET* logset){
-    char* _key = key;
-    _key = del_both_trim(_key);
-    char* _value = value;
-    _value = del_both_trim(_value);
-
-    if(strcasecmp(key,"filepath")==0){
-        strcpy(logset->filepath, value);
-        strcat(logset->filepath, "/");
-    }else if(strcasecmp(key,"loglevel")==0){
-        // INFO or INFO.console
-        char* pos;
-        if( (pos = index(value, ',')) == 0){
-            logset->loglevelCode = getLevelcode(value);
-        }else{
-            *pos= '\0';
-            logset->loglevelCode = getLevelcode(value);
-            if(strcasecmp(pos+1,"console")==0){
-                logset->loglevelCode |= getLevelcode(pos+1);
-            }
-        }
-    }else if(strcasecmp(key,"maxfilelen")==0){
-        logset->maxfilelen = atoi(value);
-    } 
-}
-
 /*   delete left&&rigth blank space   */
 static char * del_both_trim(char * str) {   
-    char* pp = str;
-     for (;*pp != '\0' && isblank(*pp) ; ++pp);
+    char *pp = str;
+    for (;*pp != '\0' && isblank(*pp) ; ++pp);  // get left consilient position
      
-    char *p;
-    for (p = pp + strlen(pp) - 1; p >= pp && isblank(*p); --p);
+    char *p = pp + strlen(pp) - 1;
+    for (; p >= pp && isblank(*p); --p);
     *(++p) = '\0';
     return pp;
 }
 
-static int isSkipRow(char* line ){
-    char* p = line;
+/*
+ * check the row is a correct row
+ * 
+ * return:
+ *  1: true
+ *  0: fasle
+ */
+static int isInvalidRow(char* row){
+    char* p = row;
     for (;*p != '\0' && isblank(*p) ; ++p);
 
     // skip ' '、 \t 、 \r 、 \n 、 \v 、 \f 
     if( isspace(p[0]) ) return 1;
     if( p[0] == '#') return 1;
-    return 0;
+    
+    // skip the row which does not exist "="
+    char* equalFlag = strchr(row, '=');
+    if( equalFlag == NULL ) 
+        return 1;
+    else
+        return 0;
 }
 
 

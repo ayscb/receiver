@@ -5,6 +5,7 @@
 	> Created Time: Wed 20 May 2015 08:06:54 AM PDT
  ************************************************************************/
 #include "utils.h"
+#include "common.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -15,6 +16,7 @@
 //**********************************************************
 //      Global Function Implement
 //**********************************************************
+
 
 static struct command_t {
     const  char msg_prefix[3];     // $$           result is  $$+2&192.1.1.1:1000&1.2.2.2.2:334
@@ -123,9 +125,9 @@ uint16_t* getInnerDataPos(char* data, uint32_t* groupNum){
  */
 void requestWorkerIPs(char* removeIP_port, char* out_data, uint16_t * out_dataLen){
     char* p = out_data;
-    uint16_t offset = sizeof (uint16_t); //skip length itself
+    uint16_t offset = sizeof (uint16_t);        //skip length itself
     strcpy(p + offset, command.msg_prefix);
-    offset += (uint16_t) strlen(command.msg_prefix);  // $$
+    offset += (uint16_t) strlen(command.msg_prefix);        // $$
     out_data[offset] = (char)reqIps;                                                   // 3
     offset ++;
     
@@ -141,3 +143,91 @@ void requestWorkerIPs(char* removeIP_port, char* out_data, uint16_t * out_dataLe
     }
     *out_dataLen = offset;
 }
+
+uint16_t vaildAndGetMsgLen(msg_header_t header){
+    if(strncasecmp(header.prefix, command.msg_prefix, strlen(command.msg_prefix)) != 0){
+        return -1;
+    }
+    uint16_t totalLen = ntohs(header.length) - 2;
+    if(totalLen > 1540 || totalLen < 0) return -1;
+    return totalLen;
+}
+
+/**
+ * get the splited element position 
+ * @param data 
+ * @param dataLen
+ * @param delim
+ * @param out_garrayNum
+ * @return 
+ */
+uint16_t* getSplitPosArray(uint8_t* data, uint16_t dataLen, uint8_t* delim, uint32_t* out_garrayNum){
+    uint32_t idx = 0;
+    uint32_t totalNum = 0;
+    uint8_t *p = data;
+    
+    for(; (p=(uint8_t*)strstr((char*)data, (char*)delim)) != NULL; totalNum++) ;        // get total number
+    uint16_t* pos = (uint16_t*) malloc(sizeof(uint16_t) * totalNum);
+
+    while(( p = (uint8_t*)strstr((char*)data, (char*)delim) ) != NULL){       // get the position
+        pos[idx++] =(uint16_t)(p-data);
+    }
+    *out_garrayNum = idx;
+    return pos;
+}
+
+//uint8_t vaildMasterMessage(char* data){
+//    if(strncasecmp(data, command.msg_prefix, strlen(command.msg_prefix)) == 0){
+//        return 1;
+//    }else{
+//        return 0;
+//    }
+//}
+
+//uint16_t* getGroupDataPos(char* data, uint16_t dataLen, uint32_t* out_groupNum){
+//    uint32_t idx = 0;
+//    uint32_t totalNum = 1;
+//    char *p = data;
+//    
+//     for(; (p - data) <= dataLen;){
+//        if( strncmp(p, command.outer_delim, strlen(command.outer_delim)) == 0 ){
+//            totalNum ++;
+//        }
+//        p += strlen(command.outer_delim);
+//    }
+//    uint16_t* pos = (uint16_t*) malloc(sizeof(uint16_t) * totalNum);
+//
+//    p = data + strlen(command.msg_prefix);    // skip $$
+//    pos[idx++] = (uint16_t)(p - data);
+//    strtok(p, command.outer_delim);
+//    while(( p = strtok(NULL, command.outer_delim)) != NULL){
+//        pos[idx++] = (uint16_t)(p - data);
+//    }
+//    *out_groupNum = idx;
+//    return pos;
+//}
+//
+//uint16_t* getInnerDataPos(char* data, uint32_t* groupNum){
+//    uint32_t idx = 0;
+//    uint32_t totalNum = 1;
+//    char *p = data;
+//    uint32_t len = strlen(p);
+//
+//    for(; (p - data) <= len;){
+//        if( strncmp(p, command.inner_delim, strlen(command.inner_delim)) == 0 ){
+//            totalNum ++;
+//        }
+//        p += strlen(command.inner_delim);
+//    }
+//    
+//    uint16_t * pos = (uint16_t*) malloc(sizeof(uint16_t) * totalNum);
+//    p = data;
+//    pos[idx++] = 0;
+//    strtok(p, command.inner_delim);
+//    while((p = strtok(NULL,command.inner_delim)) != NULL && (p-data) <= len){
+//        pos[idx++] = (uint16_t)(p - data);
+//    }
+//    *groupNum = idx;
+//    return pos;
+//}
+

@@ -7,7 +7,7 @@
 #include "common.h"
 #include "receiver.h"
 #include "conf.h"
-#include "load.h"
+#include "loadData.h"
 #include "log.h"
 
 #include <stdio.h> 
@@ -32,7 +32,7 @@ int main(int argc, char ** args) {
      testData * data = getData();
     buffer_s* sendDataBuf = fillNetflowData(data);
     
-    int initRate = 10;      // 10MB/s
+    int initRate = 140;      // 10MB/s
    
     struct timeval start, end;
     int sleepTime = getSleepTime(initRate);         // us

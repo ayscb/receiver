@@ -1,8 +1,7 @@
 
-
 TARGET=receiver
-OBJ=receiver.o test.c conf.o utils.o load.o hash.o log.o
-CC=gcc  -Wall -Werror -Wcast-align 
+OBJ=receiver.o test.c conf.o utils.o loadData.o hash.o log.o
+CC=gcc -Wall -Werror -Wcast-align 
 DEBUG=-g
 
 ${TARGET} : ${OBJ}
@@ -14,7 +13,7 @@ receiver.o : receiver.c  conf.h utils.h hash.h
 conf.o : conf.c utils.h
 	${CC} ${DEBUG} -c $<
 	
-load.o: load.c conf.h
+loadData.o: loadData.c conf.h
 	${CC} ${DEBUG} -c $<
 	
 utils.o : utils.c

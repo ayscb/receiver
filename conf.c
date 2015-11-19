@@ -114,19 +114,13 @@ static BOOLEAN readConfFile(void){
 }
 
 static BOOLEAN readMasterFile(void){
-    if( !access(filePath[1],F_OK)==0)  {
-        return FALSE;
-    }
+    if( !access(filePath[1],F_OK) == 0) return FALSE;
 
-    FILE* fp =fopen(filePath[1],"r");
-    if( fp == NULL ) {
-        return FALSE;
-    }
+    FILE* fp = fopen(filePath[1],"r");
+    if( fp == NULL )  return FALSE;
     
     uint32_t rows = getRealRowsNum(fp);
-    if( rows == 0 ){
-         return FALSE;
-    }
+    if( rows == 0 )  return FALSE;
 
     // malloc masterList
     masterList.masterIP = (struct sockaddr_in *)malloc(rows * sizeof(struct sockaddr_in));
@@ -135,9 +129,7 @@ static BOOLEAN readMasterFile(void){
     // read data
     char line[100]={0}; 
     while(fgets(line, sizeof(line), fp)!= NULL){
-        if( isSkipRow(line) ){
-            continue;  
-        }
+        if( isSkipRow(line) )  continue;  
      
         char* pos = strchr(line, ':');
         if( pos == NULL ) continue;
@@ -208,6 +200,8 @@ static void setVariable(char* key, char* value){
         strcpy(netflowtest.testLoadTemp,value);
     }else if(strcasecmp(key,"testLoadMix")==0){
         strcpy(netflowtest.testLoadMix,value);
+    }else if(strcasecmp(key,"testLoadv5")==0){
+        strcpy(netflowtest.testLoadV5,value);
     }
 }
 

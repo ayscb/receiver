@@ -9,11 +9,11 @@
 #define _LOAD_H
 
 #include <stdint.h>
-
+#include <sys/types.h>
 #define BASEINC 1000000
 
 typedef struct {
-    char data[1500];
+    u_char data[1500];
     uint16_t length;
 } testData;
 

@@ -11,7 +11,7 @@
 #include "common.h"
 
 #ifdef TEST
-#include "load.h"
+#include "loadData.h"
 #include "log.h"
 #else
 #include <rte_ether.h>
@@ -19,6 +19,7 @@
 #include <rte_udp.h>
 #endif
 
+// store the data that from DPDK
 typedef struct buffer_s {
     u_char* buff;
     uint32_t bufflen;
